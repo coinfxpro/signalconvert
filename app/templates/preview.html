@@ -7,7 +7,16 @@
 <div class="grid md:grid-cols-2 gap-6">
   <div>
     <form id="pf" class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <textarea name="payload" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 font-mono text-xs h-96">{
+      {% if bots %}
+      <label class="block text-sm mb-1 text-slate-300">Bot (marka için)</label>
+      <select name="bot_id" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-3">
+        <option value="">— Varsayılan marka —</option>
+        {% for b in bots %}
+        <option value="{{ b.id }}">{{ b.name }}{% if b.brand_name %} ({{ b.brand_name }}){% endif %}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <textarea name="payload" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 font-mono text-xs h-80">{
   "event": "DIP_AL",
   "symbol": "BMSCH",
   "subtitle": "15M %3 Kâr Al",

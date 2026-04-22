@@ -11,7 +11,7 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:5000}
       DATABASE_URL: sqlite:///data/signalconvert.db
       IMAGES_DIR: data/images
-      BRAND_NAME: ${BRAND_NAME:-Algo Trade Hunter}
+      BRAND_NAME: ${BRAND_NAME:-Alfa Trade Hunter}
       TZ: ${TZ:-Europe/Istanbul}
     volumes:
       - signalconvert_data:/app/data

@@ -52,6 +52,7 @@ async def _process(slug: str, secret: str, request: Request) -> JSONResponse:
         bot_id = bot.id
         token = bot.telegram_bot_token
         chat_id = bot.telegram_chat_id
+        brand = (bot.brand_name or bot.name or "").strip()
 
     # Mesaj kaydı oluştur (önce pending)
     try:
@@ -83,7 +84,9 @@ async def _process(slug: str, secret: str, request: Request) -> JSONResponse:
             s.add(bot_obj)
             s.commit()
 
-    # Kart üret
+    # Kart üret — bot'un brand/ismi kartta footer olarak yazılsın
+    if brand and not data.footer:
+        data.footer = brand
     img_rel = f"{bot_id}/{msg_id}.png"
     img_path: Path = settings.IMAGES_DIR / img_rel
     try:

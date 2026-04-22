@@ -99,6 +99,7 @@ async def create_bot(
     request: Request,
     name: str = Form(...),
     description: str = Form(""),
+    brand_name: str = Form(""),
     telegram_bot_token: str = Form(...),
     telegram_chat_id: str = Form(...),
     session: Session = Depends(get_session),
@@ -114,6 +115,7 @@ async def create_bot(
             "request": request, "bot": None,
             "error": f"Bot token doğrulanamadı: {e}",
             "form": {"name": name, "description": description,
+                     "brand_name": brand_name,
                      "telegram_bot_token": telegram_bot_token,
                      "telegram_chat_id": telegram_chat_id},
         }, status_code=400)
@@ -121,6 +123,7 @@ async def create_bot(
     bot = Bot(
         name=name.strip(),
         description=description.strip() or None,
+        brand_name=brand_name.strip() or None,
         telegram_bot_token=telegram_bot_token.strip(),
         telegram_chat_id=telegram_chat_id.strip(),
         webhook_slug=generate_webhook_slug(),
@@ -129,6 +132,59 @@ async def create_bot(
     session.add(bot)
     session.commit()
     session.refresh(bot)
+    return RedirectResponse(url=f"/bots/{bot.id}", status_code=303)
+
+
+# ---------------------------------------------------------------- BOT EDIT
+@router.get("/bots/{bot_id}/edit", response_class=HTMLResponse)
+def edit_bot_page(bot_id: int, request: Request, session: Session = Depends(get_session)):
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login", status_code=303)
+    bot = session.get(Bot, bot_id)
+    if not bot:
+        raise HTTPException(status_code=404, detail="bot not found")
+    return templates.TemplateResponse("bot_form.html", {
+        "request": request, "bot": bot, "error": None,
+    })
+
+
+@router.post("/bots/{bot_id}/edit")
+async def update_bot(
+    bot_id: int,
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(""),
+    brand_name: str = Form(""),
+    telegram_bot_token: str = Form(...),
+    telegram_chat_id: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login", status_code=303)
+    bot = session.get(Bot, bot_id)
+    if not bot:
+        raise HTTPException(status_code=404, detail="bot not found")
+
+    # Token değiştiyse doğrula
+    new_token = telegram_bot_token.strip()
+    if new_token != bot.telegram_bot_token:
+        try:
+            await verify_bot(new_token)
+        except TelegramError as e:
+            return templates.TemplateResponse("bot_form.html", {
+                "request": request, "bot": bot,
+                "error": f"Bot token doğrulanamadı: {e}",
+            }, status_code=400)
+
+    bot.name = name.strip()
+    bot.description = description.strip() or None
+    bot.brand_name = brand_name.strip() or None
+    bot.telegram_bot_token = new_token
+    bot.telegram_chat_id = telegram_chat_id.strip()
+    from datetime import datetime as _dt
+    bot.updated_at = _dt.utcnow()
+    session.add(bot)
+    session.commit()
     return RedirectResponse(url=f"/bots/{bot.id}", status_code=303)
 
 
@@ -205,6 +261,7 @@ async def test_send(bot_id: int, request: Request, session: Session = Depends(ge
         "rr": 0.66, "confidence": 74.9, "change_pct": 0.0,
     }
     data = _pp(demo)
+    data.footer = (bot.brand_name or bot.name or "").strip() or data.footer
     from pathlib import Path as _P
     img_rel = f"{bot.id}/test-preview.png"
     img_path: _P = settings.IMAGES_DIR / img_rel
@@ -224,20 +281,32 @@ async def test_send(bot_id: int, request: Request, session: Session = Depends(ge
 
 # ---------------------------------------------------------------- PREVIEW
 @router.get("/preview", response_class=HTMLResponse)
-def preview_page(request: Request):
+def preview_page(request: Request, session: Session = Depends(get_session)):
     if not is_authenticated(request):
         return RedirectResponse(url="/login", status_code=303)
-    return templates.TemplateResponse("preview.html", {"request": request})
+    bots = session.exec(select(Bot).order_by(Bot.created_at.asc())).all()
+    return templates.TemplateResponse("preview.html", {"request": request, "bots": bots})
 
 
 @router.post("/preview/render")
-def preview_render(request: Request, payload: str = Form(...)):
+def preview_render(request: Request, payload: str = Form(...),
+                   bot_id: int | None = Form(None),
+                   session: Session = Depends(get_session)):
     if not is_authenticated(request):
         raise HTTPException(status_code=401)
     try:
         data = parse_payload(payload)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(e))
+    # Bot seçilmişse brand'ini kullan, yoksa ilk botun brand'ini, o da yoksa env default
+    if bot_id:
+        bot = session.get(Bot, bot_id)
+        if bot:
+            data.footer = (bot.brand_name or bot.name or "").strip() or data.footer
+    elif not data.footer:
+        first_bot = session.exec(select(Bot).order_by(Bot.created_at.asc())).first()
+        if first_bot:
+            data.footer = (first_bot.brand_name or first_bot.name or "").strip()
     out = settings.IMAGES_DIR / "_preview.png"
     render_to_file(data, out)
     return FileResponse(out, media_type="image/png")

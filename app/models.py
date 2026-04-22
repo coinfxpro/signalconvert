@@ -19,6 +19,7 @@ class Bot(SQLModel, table=True):
     webhook_secret: str = Field(description="Ek güvenlik tokeni; URL'de query veya path'te tutulur")
     active: bool = Field(default=True)
     card_style: str = Field(default="default", description="Kart şablonu seçimi (ileride genişletilebilir)")
+    brand_name: Optional[str] = Field(default=None, description="Kartlarda görünen marka/bot ismi (boşsa env BRAND_NAME kullanılır)")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

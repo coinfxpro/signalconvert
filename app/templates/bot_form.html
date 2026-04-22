@@ -1,43 +1,65 @@
 {% extends "base.html" %}
-{% block title %}Yeni Bot{% endblock %}
+{% block title %}{% if bot %}Bot Düzenle{% else %}Yeni Bot{% endif %}{% endblock %}
 {% block content %}
+{% set f = form or bot %}
 <div class="max-w-2xl">
-  <h1 class="text-2xl font-bold mb-1">Yeni Bot</h1>
-  <p class="text-slate-400 text-sm mb-6">Bir Telegram bot token'ı + hedef chat_id girin. Kayıt sonrası benzersiz webhook URL'i alırsınız.</p>
+  <h1 class="text-2xl font-bold mb-1">{% if bot %}Bot Düzenle{% else %}Yeni Bot{% endif %}</h1>
+  <p class="text-slate-400 text-sm mb-6">
+    {% if bot %}Bot bilgilerini güncelle. Webhook URL değişmez.
+    {% else %}Bir Telegram bot token'ı + hedef chat_id girin. Kayıt sonrası benzersiz webhook URL'i alırsınız.
+    {% endif %}
+  </p>
 
   {% if error %}
   <div class="mb-4 px-3 py-2 rounded bg-red-900/40 border border-red-800 text-red-200 text-sm">{{ error }}</div>
   {% endif %}
 
-  <form method="post" class="space-y-5 bg-slate-900 border border-slate-800 rounded-xl p-6">
+  <form method="post" action="{% if bot %}/bots/{{ bot.id }}/edit{% else %}/bots/new{% endif %}"
+        class="space-y-5 bg-slate-900 border border-slate-800 rounded-xl p-6">
     <div>
       <label class="block text-sm mb-1 text-slate-300">İsim</label>
-      <input name="name" required value="{{ form.name if form else '' }}"
+      <input name="name" required value="{{ f.name if f else '' }}"
              placeholder="Örn. Dip Alım Botu"
              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+      <p class="text-xs text-slate-500 mt-1">Dashboard'da listelenirken kullanılır.</p>
     </div>
+
+    <div>
+      <label class="block text-sm mb-1 text-slate-300">Kart Marka İsmi (opsiyonel)</label>
+      <input name="brand_name" value="{{ f.brand_name if f and f.brand_name else '' }}"
+             placeholder="Örn. Alfa Trade Hunter"
+             class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2" />
+      <p class="text-xs text-slate-500 mt-1">Telegram kartlarında sağ üst ve sağ altta görünür. Boşsa bot ismi kullanılır.</p>
+    </div>
+
     <div>
       <label class="block text-sm mb-1 text-slate-300">Açıklama (opsiyonel)</label>
-      <input name="description" value="{{ form.description if form else '' }}"
+      <input name="description" value="{{ f.description if f and f.description else '' }}"
              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2" />
     </div>
+
     <div>
       <label class="block text-sm mb-1 text-slate-300">Telegram Bot Token</label>
-      <input name="telegram_bot_token" required value="{{ form.telegram_bot_token if form else '' }}"
+      <input name="telegram_bot_token" required value="{{ f.telegram_bot_token if f else '' }}"
              placeholder="123456789:AA..."
              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 font-mono text-sm" />
       <p class="text-xs text-slate-500 mt-1">@BotFather ile oluştur.</p>
     </div>
+
     <div>
       <label class="block text-sm mb-1 text-slate-300">Telegram Chat ID</label>
-      <input name="telegram_chat_id" required value="{{ form.telegram_chat_id if form else '' }}"
+      <input name="telegram_chat_id" required value="{{ f.telegram_chat_id if f else '' }}"
              placeholder="@kanalin_adi  veya  -1001234567890"
              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 font-mono text-sm" />
       <p class="text-xs text-slate-500 mt-1">Kanal/grup ID'si (bot kanalda yönetici olmalı).</p>
     </div>
+
     <div class="flex gap-3">
-      <button class="bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-lg font-semibold">Oluştur</button>
-      <a href="/" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">İptal</a>
+      <button class="bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-lg font-semibold">
+        {% if bot %}Kaydet{% else %}Oluştur{% endif %}
+      </button>
+      <a href="{% if bot %}/bots/{{ bot.id }}{% else %}/{% endif %}"
+         class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">İptal</a>
     </div>
   </form>
 </div>

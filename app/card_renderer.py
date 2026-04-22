@@ -21,8 +21,8 @@ from .config import settings
 CARD_W = 900
 CARD_H = 500
 
-# Marka adı — env ile değişebilir
-BRAND_NAME = os.getenv("BRAND_NAME", "Algo Trade Hunter")
+# Varsayılan marka adı — env ile değişebilir; webhook/test endpointleri bot.brand_name veya bot.name gönderir.
+BRAND_NAME = os.getenv("BRAND_NAME", "Alfa Trade Hunter")
 
 # Türkiye saati (UTC+3)
 TR_TZ = timezone(timedelta(hours=3))

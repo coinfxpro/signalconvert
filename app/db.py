@@ -14,11 +14,31 @@ engine = create_engine(settings.DATABASE_URL, echo=False, connect_args=connect_a
 
 
 def init_db() -> None:
-    """Uygulama açılışında tabloları oluştur."""
+    """Uygulama açılışında tabloları oluştur ve basit migrasyon uygula."""
     # Modellerin import edildiğinden emin ol
     from . import models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
+    _apply_migrations()
+
+
+def _apply_migrations() -> None:
+    """Eski DB'lere yeni kolonları ekleyen minimal migrasyon (SQLite)."""
+    from sqlalchemy import text, inspect
+
+    inspector = inspect(engine)
+    tables = inspector.get_table_names()
+    if "bot" not in tables:
+        return
+    cols = {c["name"] for c in inspector.get_columns("bot")}
+    migrations: list[str] = []
+    if "brand_name" not in cols:
+        migrations.append("ALTER TABLE bot ADD COLUMN brand_name VARCHAR")
+    if not migrations:
+        return
+    with engine.begin() as conn:
+        for sql in migrations:
+            conn.execute(text(sql))
 
 
 @contextmanager
