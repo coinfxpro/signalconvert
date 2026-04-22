@@ -1,0 +1,668 @@
+// ============================================================
+// ALFA DİP GİRİŞ v6.1 — 15dk Dipten Dönüş Giriş Sistemi
+// ============================================================
+// v6.1 DEĞİŞİKLİK:
+//   ★ REPAINT SORUNU ÇÖZÜLDÜ:
+//     - alSinyal'de barstate.isconfirmed zorunlu
+//     - plotshape yerine label.new() → kalıcı, silinmez
+//     - Stop/TP/Trail da label.new() ile kalıcı
+//   ★ Giriş fiyatı = bar kapanış fiyatı (confirmed)
+// v6.0:
+//   ★ HİBRİT SKOR: Confirmed [1] + Canlı [0] günlük skor
+// v5.4:
+//   ★ 7 grup v5.2 Tarama ile birebir, monolitik bitfield
+// ============================================================
+
+//@version=6
+indicator("Alfa Dip Giriş ALERT v6.1", shorttitle="Alfa DipG ALERT v6.1", overlay=true, max_labels_count=500)
+
+// ==================== PARAMETRELER ====================
+emaKisaPeriod  = input.int(9, "EMA Kısa (15dk)", minval=5, maxval=20, group="═══ GİRİŞ ═══")
+emaUzunPeriod  = input.int(21, "EMA Uzun (15dk)", minval=15, maxval=50, group="═══ GİRİŞ ═══")
+rsiGirisMin    = input.float(30.0, "RSI Giriş Min", minval=20, maxval=40, group="═══ GİRİŞ ═══")
+rsiGirisMax    = input.float(55.0, "RSI Giriş Max", minval=45, maxval=70, group="═══ GİRİŞ ═══")
+hacimKatsayi   = input.float(1.3, "Hacim Katsayısı (giriş)", minval=1.0, maxval=3.0, step=0.1, group="═══ GİRİŞ ═══")
+minGunlukDip   = input.int(4, "Min Günlük Dip Skor", minval=3, maxval=7, group="═══ GİRİŞ ═══", tooltip="Günlük dip taramadan gelen minimum skor.\nBu koşul sağlanmazsa 15dk sinyal üretilmez.")
+pencereGun     = input.int(2, "Dip Skor Penceresi (gün)", minval=1, maxval=3, group="═══ GİRİŞ ═══", tooltip="Son kaç günün KAPANMIŞ barında dip skoru aranacak.\n1 = sadece dün\n2 = dün veya önceki gün\n3 = son 3 gün")
+
+// ═══ OLMAZSA OLMAZ KOŞULLAR (GÜNLÜK) ═══
+bool oo_daily_ma   = input.bool(true, "Günlük: MA (G1) Şart Olsun", group="Filtreler")
+bool oo_daily_dip  = input.bool(true, "Günlük: Dip (G2) Şart Olsun", group="Filtreler")
+bool oo_daily_mum  = input.bool(true, "Günlük: Mum (G3) Şart Olsun", group="Filtreler")
+bool oo_daily_hcm  = input.bool(false, "Günlük: Hacim (G4) Şart Olsun", group="Filtreler")
+
+// ═══ OLMAZSA OLMAZ KOŞULLAR (15DK) ═══
+bool oo_15dk_ema   = input.bool(true, "15dk: EMA Cross (K2) Şart Olsun", group="Filtreler")
+bool oo_15dk_hcm   = input.bool(true, "15dk: Hacim (K5) Şart Olsun", group="Filtreler")
+bool oo_15dk_vwap  = input.bool(true, "15dk: VWAP (K6) Şart Olsun", group="Filtreler")
+
+show_pusu      = input.bool(true, "Dip Pusu Sinyallerini Göster", group="═══ GİRİŞ ═══")
+show_hedef     = input.bool(true, "Hedef Gerçekleşmelerini Göster", group="═══ GİRİŞ ═══")
+show_trailing  = input.bool(true, "Trailing Stop Uyarılarını Göster", group="═══ GİRİŞ ═══")
+
+stopATR        = input.float(1.5, "Stop ATR Çarpanı", minval=0.5, maxval=4.0, step=0.5, group="═══ RİSK ═══")
+tp1ATR         = input.float(2.0, "TP1 ATR Çarpanı", minval=1.0, maxval=5.0, step=0.5, group="═══ RİSK ═══")
+tp2ATR         = input.float(3.0, "TP2 ATR Çarpanı", minval=2.0, maxval=8.0, step=0.5, group="═══ RİSK ═══")
+trailATR       = input.float(1.5, "Trailing ATR Çarpanı", minval=0.5, maxval=4.0, step=0.5, group="═══ RİSK ═══")
+
+islemLimiti    = input.float(100000, "İşlem Limiti (TL)", minval=10000, step=10000, group="═══ BÜTÇE ═══")
+gosterTablo    = input.bool(true, "Tablo Göster", group="Görsel")
+gosterSeviyeler = input.bool(true, "Stop/TP Çizgileri", group="Görsel")
+
+is15dk = timeframe.period == "15"
+
+// ============================================================
+// GÜNLÜK DİP SKORU — v5.2 TARAMA İLE BİREBİR AYNI MANTIK
+// ============================================================
+_maYakinlik = 2.0
+_dipYakin3ay = 10.0
+_dipYakin1yil = 20.0
+_rsiOversoldEsik = 35.0
+_hacimPatlamaKat = 1.5
+
+// ═══ GRUP 1: MA DESTEK ═══
+_sma50  = ta.sma(close, 50)
+_sma200 = ta.sma(close, 200)
+_sma500 = ta.sma(close, 500)
+_ema277 = ta.ema(close, 277)
+_ema89  = ta.ema(close, 89)
+_vwma50 = ta.vwma(close, 50)
+
+_sma50_uzk  = nz(_sma50)  > 0 ? ((close - _sma50)  / _sma50)  * 100 : 999.0
+_sma200_uzk = nz(_sma200) > 0 ? ((close - _sma200) / _sma200) * 100 : 999.0
+_sma500_uzk = nz(_sma500) > 0 ? ((close - _sma500) / _sma500) * 100 : 999.0
+_ema277_uzk = nz(_ema277) > 0 ? ((close - _ema277) / _ema277) * 100 : 999.0
+_ema89_uzk  = nz(_ema89)  > 0 ? ((close - _ema89)  / _ema89)  * 100 : 999.0
+_vwma50_uzk = nz(_vwma50) > 0 ? ((close - _vwma50) / _vwma50) * 100 : 999.0
+
+_sma50_yakin  = math.abs(_sma50_uzk)  <= _maYakinlik
+_sma200_yakin = math.abs(_sma200_uzk) <= _maYakinlik
+_sma500_yakin = math.abs(_sma500_uzk) <= _maYakinlik
+_ema277_yakin = math.abs(_ema277_uzk) <= _maYakinlik
+_ema89_yakin  = math.abs(_ema89_uzk)  <= _maYakinlik
+_vwma50_yakin = math.abs(_vwma50_uzk) <= _maYakinlik
+
+_sma50_bounce  = _sma50_yakin  and (low <= _sma50  or low[1] <= _sma50[1]  or low[2] <= _sma50[2])  and close > open and close > _sma50
+_sma200_bounce = _sma200_yakin and (low <= _sma200 or low[1] <= _sma200[1] or low[2] <= _sma200[2]) and close > open and close > _sma200
+_sma500_bounce = _sma500_yakin and (low <= _sma500 or low[1] <= _sma500[1] or low[2] <= _sma500[2]) and close > open and close > _sma500
+_ema277_bounce = _ema277_yakin and (low <= _ema277 or low[1] <= _ema277[1] or low[2] <= _ema277[2]) and close > open and close > _ema277
+_ema89_bounce  = _ema89_yakin  and (low <= _ema89  or low[1] <= _ema89[1]  or low[2] <= _ema89[2])  and close > open and close > _ema89
+_vwma50_bounce = _vwma50_yakin and (low <= _vwma50 or low[1] <= _vwma50[1] or low[2] <= _vwma50[2]) and close > open and close > _vwma50
+
+_sma50_alttan  = _sma50_uzk  >= -4.0 and _sma50_uzk  <= 0 and close > close[1]
+_sma200_alttan = _sma200_uzk >= -4.0 and _sma200_uzk <= 0 and close > close[1]
+_sma500_alttan = _sma500_uzk >= -4.0 and _sma500_uzk <= 0 and close > close[1]
+_ema277_alttan = _ema277_uzk >= -4.0 and _ema277_uzk <= 0 and close > close[1]
+_ema89_alttan  = _ema89_uzk  >= -4.0 and _ema89_uzk  <= 0 and close > close[1]
+_vwma50_alttan = _vwma50_uzk >= -4.0 and _vwma50_uzk <= 0 and close > close[1]
+
+_g1 = (_sma50_bounce or _sma50_alttan) or (_sma200_bounce or _sma200_alttan) or (_sma500_bounce or _sma500_alttan) or (_ema277_bounce or _ema277_alttan) or (_ema89_bounce or _ema89_alttan) or (_vwma50_bounce or _vwma50_alttan)
+
+// ═══ GRUP 2: DİP YAKINLIĞI + RSI ═══
+_rsi14  = ta.rsi(close, 14)
+_low63  = ta.lowest(low, 63)
+_low252 = ta.lowest(low, 252)
+_dist3m = nz(_low63)  > 0 ? ((close - _low63)  / _low63)  * 100 : 999.0
+_dist1y = nz(_low252) > 0 ? ((close - _low252) / _low252) * 100 : 999.0
+_dipYakin_3ay  = _dist3m <= _dipYakin3ay
+_dipYakin_1yil = _dist1y <= _dipYakin1yil
+_rsiOversold   = _rsi14 <= _rsiOversoldEsik
+_rsiDonus      = _rsi14 > 30 and _rsi14[1] <= 30
+_g2 = (_dipYakin_3ay or _dipYakin_1yil) and (_rsiOversold or _rsiDonus)
+
+// ═══ GRUP 3: MUM FORMASYONU ═══
+_govde     = math.abs(close - open)
+_ustGolge  = high - math.max(close, open)
+_altGolge  = math.min(close, open) - low
+_mumRange  = high - low
+_yesilMum  = close > open
+_kirmiziMum = close < open
+_isHammer     = _altGolge >= _govde * 2.0 and _ustGolge <= _govde * 0.5 and _mumRange > 0 and _govde > 0
+_isInvHammer  = _ustGolge >= _govde * 2.0 and _altGolge <= _govde * 0.5 and _kirmiziMum[1] and _mumRange > 0
+_isEngulfing  = _yesilMum and _kirmiziMum[1] and open <= close[1] and close >= open[1] and _govde > math.abs(close[1] - open[1])
+_isMorningStar = _yesilMum and _govde > _mumRange * 0.3 and math.abs(close[1] - open[1]) <= (high[1] - low[1]) * 0.2 and close[2] < open[2]
+_isPiercing   = _yesilMum and _kirmiziMum[1] and open < close[1] and close > (open[1] + close[1]) / 2 and close < open[1]
+_isDragonfly  = _govde <= _mumRange * 0.05 and _altGolge >= _mumRange * 0.7 and _mumRange > 0
+_mumBugun = _isHammer or _isEngulfing or _isMorningStar or _isPiercing or _isInvHammer or _isDragonfly
+_g3 = _mumBugun or _mumBugun[1] or _mumBugun[2]
+
+// ═══ GRUP 4: HACİM TEYİDİ ═══
+_hacim20  = ta.sma(volume, 20)
+_hacim5   = ta.sma(volume, 5)
+_hacimOran = nz(_hacim20) > 0 ? volume / _hacim20 : 0.0
+_hacimPatlama   = _hacimOran >= _hacimPatlamaKat
+_obvVal         = ta.obv
+_obvSma20       = ta.sma(_obvVal, 20)
+_obvBirikim     = _obvVal > _obvSma20
+_satisTukenmesi = _hacim5 < _hacim20 * 0.8 and close < close[5]
+_yesilHacimGucu = _yesilMum and volume > _hacim20 * 1.2
+_vwmaCross      = close > _vwma50 and close[1] <= nz(_vwma50[1])
+_g4 = _hacimPatlama or (_obvBirikim and _yesilHacimGucu) or (_satisTukenmesi and _g3) or _vwmaCross
+
+// ═══ GRUP 5: TREND DÖNÜŞ ═══
+_ema21 = ta.ema(close, 21)
+_ema50 = ta.ema(close, 50)
+_atrSmooth = ta.rma(ta.tr(true), 14)
+_upMove    = high - high[1]
+_downMove  = low[1] - low
+_plusDM    = _upMove > _downMove and _upMove > 0 ? _upMove : 0.0
+_minusDM   = _downMove > _upMove and _downMove > 0 ? _downMove : 0.0
+_diPlus    = nz(_atrSmooth) > 0 ? 100 * ta.rma(_plusDM, 14) / _atrSmooth : 0.0
+_diMinus   = nz(_atrSmooth) > 0 ? 100 * ta.rma(_minusDM, 14) / _atrSmooth : 0.0
+_dxDenom   = _diPlus + _diMinus
+_dx        = _dxDenom > 0 ? math.abs(_diPlus - _diMinus) / _dxDenom * 100 : 0.0
+_adx       = ta.rma(_dx, 14)
+_macdFast = ta.ema(close, 12)
+_macdSlow = ta.ema(close, 26)
+_macdLine = _macdFast - _macdSlow
+_macdSig  = ta.ema(_macdLine, 9)
+_macdHist = _macdLine - _macdSig
+_stochRsi = ta.rsi(_rsi14, 14)
+_fiyatDip14 = ta.lowest(low, 14)
+_fiyatDip28 = ta.lowest(low, 28)
+_rsiDip14   = ta.lowest(_rsi14, 14)
+_rsiDip28   = ta.lowest(_rsi14, 28)
+_adxZayifliyor = _adx < nz(_adx[5]) and _diMinus > _diPlus and _adx > 20
+_ema21Donus    = _ema21 > nz(_ema21[3]) and nz(_ema21[3]) < nz(_ema21[6])
+_macdHistDonus = _macdHist > nz(_macdHist[1]) and _macdHist < 0
+_bullishDiv    = _fiyatDip14 <= _fiyatDip28 and _rsiDip14 > _rsiDip28 and _rsi14 < 45
+_stochDonus    = _stochRsi > 20 and nz(_stochRsi[1]) <= 20
+_ema89Donus    = close > _ema89 and close[1] <= nz(_ema89[1])
+_g5 = _adxZayifliyor or _ema21Donus or _macdHistDonus or _bullishDiv or _stochDonus or _ema89Donus
+
+// ═══ GRUP 7: ICHIMOKU ═══
+_tenkan  = (ta.highest(high, 9) + ta.lowest(low, 9)) / 2
+_kijun   = (ta.highest(high, 26) + ta.lowest(low, 26)) / 2
+_senkouA = (_tenkan + _kijun) / 2
+_senkouB = (ta.highest(high, 52) + ta.lowest(low, 52)) / 2
+_kumoUst = math.max(_senkouA, _senkouB)
+_kumoAlt = math.min(_senkouA, _senkouB)
+_kumoYakin = nz(_kumoAlt) > 0 ? math.abs((close - _kumoAlt) / _kumoAlt) * 100 : 999.0
+_fBulutAlti = close < _kumoAlt
+_fBulutIci  = close >= _kumoAlt and close <= _kumoUst
+_fBulutUstu = close > _kumoUst
+_kumoyaGiris   = _fBulutIci and close[1] < nz(_kumoAlt[1])
+_kumoyuGecti   = _fBulutUstu and (close[1] <= nz(_kumoUst[1]) or close[2] <= nz(_kumoUst[2]))
+_kumoDestekTesti = _fBulutAlti and _kumoYakin <= _maYakinlik and close > close[1]
+_tkCross       = _tenkan > _kijun and nz(_tenkan[1]) <= nz(_kijun[1])
+_kumoRenkDegisim = _senkouA > _senkouB and nz(_senkouA[1]) <= nz(_senkouB[1])
+_g7 = _kumoyaGiris or _kumoyuGecti or _kumoDestekTesti or _tkCross or _kumoRenkDegisim
+
+// ═══ BİTFİELD + REQUEST.SECURITY ═══
+_skorBits = (_g1 ? 1 : 0) + (_g2 ? 2 : 0) + (_g3 ? 4 : 0) + (_g4 ? 8 : 0) + (_g5 ? 16 : 0) + (_g7 ? 32 : 0)
+
+bits_d1 = request.security(syminfo.tickerid, "1D", _skorBits[1], lookahead=barmerge.lookahead_on)
+bits_d2 = request.security(syminfo.tickerid, "1D", _skorBits[2], lookahead=barmerge.lookahead_on)
+bits_d3 = request.security(syminfo.tickerid, "1D", _skorBits[3], lookahead=barmerge.lookahead_on)
+bits_live = request.security(syminfo.tickerid, "1D", _skorBits, lookahead=barmerge.lookahead_off)
+onceki_gun=request.security(syminfo.tickerid,"1D",(close[1]))
+gunluk_degisim=request.security(syminfo.tickerid,timeframe.period,(close-onceki_gun)/onceki_gun*100)
+
+
+f_bit(_val, _bit) => math.floor(_val / _bit) % 2 >= 1
+
+live_g1 = f_bit(bits_live, 1)
+live_g2 = f_bit(bits_live, 2)
+live_g3 = f_bit(bits_live, 4)
+live_g4 = f_bit(bits_live, 8)
+live_g5 = f_bit(bits_live, 16)
+live_g7 = f_bit(bits_live, 32)
+
+d1_g1 = f_bit(bits_d1, 1)
+d1_g2 = f_bit(bits_d1, 2)
+d1_g3 = f_bit(bits_d1, 4)
+d1_g4 = f_bit(bits_d1, 8)
+d1_g5 = f_bit(bits_d1, 16)
+d1_g7 = f_bit(bits_d1, 32)
+d2_g1 = f_bit(bits_d2, 1)
+d2_g2 = f_bit(bits_d2, 2)
+d2_g3 = f_bit(bits_d2, 4)
+d2_g4 = f_bit(bits_d2, 8)
+d2_g5 = f_bit(bits_d2, 16)
+d2_g7 = f_bit(bits_d2, 32)
+d3_g1 = f_bit(bits_d3, 1)
+d3_g2 = f_bit(bits_d3, 2)
+d3_g3 = f_bit(bits_d3, 4)
+d3_g4 = f_bit(bits_d3, 8)
+d3_g5 = f_bit(bits_d3, 16)
+d3_g7 = f_bit(bits_d3, 32)
+
+// ═══ GRUP 6: Haftalık MTF ═══
+// Hacim formülünü önce bir değişkene atamak [1] ile çağırırken hata almamak için daha sağlıklıdır
+w_vol_calc = nz(ta.sma(volume, 20)) > 0 ? ta.sma(volume, 5) / ta.sma(volume, 20) : 0.0
+
+// Verilerin kapanmış (geçmiş) halini almak için serilere [1] ekledik
+w_rsi14   = request.security(syminfo.tickerid, "1W", ta.rsi(close, 14)[1], lookahead=barmerge.lookahead_on)
+w_emaData = request.security(syminfo.tickerid, "1W", (ta.ema(close, 21) - ta.ema(close, 50))[1], lookahead=barmerge.lookahead_on)
+w_volume  = request.security(syminfo.tickerid, "1W", w_vol_calc[1], lookahead=barmerge.lookahead_on)
+
+w_rsiOversold = w_rsi14 <= 40
+w_rsiDonus    = w_rsi14 > 35 and w_rsi14 < 50
+w_rsiUygun    = w_rsiOversold or w_rsiDonus
+w_emaUygun    = w_emaData > 0 or (w_emaData > nz(w_emaData[1]) and w_emaData < 0)
+w_hacimUygun  = w_volume > 0.8
+g6_val = ((w_rsiUygun ? 1 : 0) + (w_emaUygun ? 1 : 0) + (w_hacimUygun ? 1 : 0)) >= 2
+
+// ═══ TOPLAM SKOR ═══
+skor_d1 = (d1_g1 ? 1 : 0) + (d1_g2 ? 1 : 0) + (d1_g3 ? 1 : 0) + (d1_g4 ? 1 : 0) + (d1_g5 ? 1 : 0) + (g6_val ? 1 : 0) + (d1_g7 ? 1 : 0)
+skor_d2 = (d2_g1 ? 1 : 0) + (d2_g2 ? 1 : 0) + (d2_g3 ? 1 : 0) + (d2_g4 ? 1 : 0) + (d2_g5 ? 1 : 0) + (g6_val ? 1 : 0) + (d2_g7 ? 1 : 0)
+skor_d3 = (d3_g1 ? 1 : 0) + (d3_g2 ? 1 : 0) + (d3_g3 ? 1 : 0) + (d3_g4 ? 1 : 0) + (d3_g5 ? 1 : 0) + (g6_val ? 1 : 0) + (d3_g7 ? 1 : 0)
+
+gunlukDipOK_d1 = skor_d1 >= minGunlukDip
+gunlukDipOK_d2 = skor_d2 >= minGunlukDip
+gunlukDipOK_d3 = skor_d3 >= minGunlukDip
+gunlukDipOK = pencereGun == 1 ? gunlukDipOK_d1 : pencereGun == 2 ? (gunlukDipOK_d1 or gunlukDipOK_d2) : (gunlukDipOK_d1 or gunlukDipOK_d2 or gunlukDipOK_d3)
+
+gunlukDipSkor = math.max(skor_d1, pencereGun >= 2 ? skor_d2 : 0, pencereGun >= 3 ? skor_d3 : 0)
+gunlukDipGun = gunlukDipOK_d1 ? "Dün" : gunlukDipOK_d2 ? "2g önce" : gunlukDipOK_d3 ? "3g önce" : "—"
+gunlukDipGunSkor = gunlukDipOK_d1 ? skor_d1 : gunlukDipOK_d2 ? skor_d2 : gunlukDipOK_d3 ? skor_d3 : 0
+
+dg1_best = gunlukDipOK_d1 ? d1_g1 : gunlukDipOK_d2 ? d2_g1 : d3_g1
+dg2_best = gunlukDipOK_d1 ? d1_g2 : gunlukDipOK_d2 ? d2_g2 : d3_g2
+dg3_best = gunlukDipOK_d1 ? d1_g3 : gunlukDipOK_d2 ? d2_g3 : d3_g3
+dg4_best = gunlukDipOK_d1 ? d1_g4 : gunlukDipOK_d2 ? d2_g4 : d3_g4
+dg5_best = gunlukDipOK_d1 ? d1_g5 : gunlukDipOK_d2 ? d2_g5 : d3_g5
+dg6_best = g6_val
+dg7_best = gunlukDipOK_d1 ? d1_g7 : gunlukDipOK_d2 ? d2_g7 : d3_g7
+
+skor_live = (live_g1 ? 1 : 0) + (live_g2 ? 1 : 0) + (live_g3 ? 1 : 0) + (live_g4 ? 1 : 0) + (live_g5 ? 1 : 0) + (g6_val ? 1 : 0) + (live_g7 ? 1 : 0)
+liveDipOK = skor_live >= minGunlukDip
+
+d_atr14 = request.security(syminfo.tickerid, "1D", ta.atr(14)[1], lookahead=barmerge.lookahead_on)
+
+// ============================================================
+// 15DK İNDİKATÖRLER
+// ============================================================
+ema9     = ta.ema(close, emaKisaPeriod)
+ema21_15 = ta.ema(close, emaUzunPeriod)
+// Her yeni günde sıfırlanan (Daily Anchored) VWAP
+vwapDeger = ta.vwap(hlc3, timeframe.change("D"))
+rsi15    = ta.rsi(close, 14)
+macdFast15   = ta.ema(close, 12)
+macdSlow15   = ta.ema(close, 26)
+macdLine15   = macdFast15 - macdSlow15
+signalLine15 = ta.ema(macdLine15, 9)
+macdHist15   = macdLine15 - signalLine15
+hacim20   = ta.sma(volume, 20)
+hacimOran = nz(hacim20) > 0 ? volume / hacim20 : 0.0
+atr14     = ta.atr(14)
+
+// ============================================================
+// 15DK GİRİŞ KRİTERLERİ
+// ============================================================
+// Seçili olan 'olmazsa olmaz'ların her birini kontrol et
+daily_oo_onay = (oo_daily_ma ? dg1_best : true) and 
+                 (oo_daily_dip ? dg2_best : true) and 
+                 (oo_daily_mum ? dg3_best : true) and 
+                 (oo_daily_hcm ? dg4_best : true)
+
+// Günlük ana koşulun güncellenmesi
+kriter1_gunluk = gunlukDipOK and daily_oo_onay
+
+emaCross = ema9 > ema21_15 and ema9[1] <= ema21_15[1]
+emaYukari = ema9 > ema21_15
+emaYakinsamaCross = ema9 > ema9[3] and ema21_15 > ema21_15[3] and (ema9 - ema21_15) > (ema9[3] - ema21_15[3])
+kriter2_emaTrend = emaCross or (emaYukari and emaYakinsamaCross)
+
+rsiYukari = rsi15 > rsi15[1] and rsi15 > rsi15[2]
+kriter3_rsi = rsi15 >= rsiGirisMin and rsi15 <= rsiGirisMax and rsiYukari
+
+macdPozitif = macdHist15 > 0 and macdHist15[1] <= 0
+macdArtiyor = macdHist15 > macdHist15[1] and macdHist15 > macdHist15[2]
+kriter4_macd = macdPozitif or (macdHist15 > 0 and macdArtiyor)
+
+yesilMum = close > open
+kriter5_hacim = hacimOran >= hacimKatsayi or (yesilMum and volume > hacim20)
+
+kriter6_vwap = close > vwapDeger
+
+onceLow = ta.lowest(low[10], 10)
+sonLow  = ta.lowest(low, 10)
+kriter7_hl = sonLow > onceLow
+
+girisSkoru = (kriter1_gunluk ? 1 : 0) + (kriter2_emaTrend ? 1 : 0) + (kriter3_rsi ? 1 : 0) + (kriter4_macd ? 1 : 0) + (kriter5_hacim ? 1 : 0) + (kriter6_vwap ? 1 : 0) + (kriter7_hl ? 1 : 0)
+
+// 15dk'daki kritik seçimleri denetle
+ltf_oo_onay = (oo_15dk_ema ? kriter2_emaTrend : true) and 
+               (oo_15dk_hcm ? kriter5_hacim : true) and 
+               (oo_15dk_vwap ? kriter6_vwap : true)
+
+// Yeni Emniyet Kemeri: Canlı Günlük Skor 5'in Altına Düşerse Girişi Kapat
+liveSkorLimit = 4 
+canliSkorOnay = skor_live >= liveSkorLimit
+
+// Güncellenmiş Giriş Mantığı
+girisHazir = girisSkoru >= 5 and kriter1_gunluk and kriter2_emaTrend and canliSkorOnay
+
+pusuAktif = girisSkoru >= 4 and girisSkoru < 5 and kriter1_gunluk
+
+// ============================================================
+// POZİSYON YÖNETİMİ — REPAINT-PROOF (var bar_index kayıt)
+// ============================================================
+var bool  pozisyonAcik   = false
+var float girisFiyat     = na
+var float stopFiyat      = na
+var float tp1Fiyat       = na
+var float tp2Fiyat       = na
+var float trailingStop   = na
+var float enYuksek       = na
+var bool  tp1Ulasti      = false
+var int   girisBar       = na
+var bool  bugunIslemVar  = false
+var int   kazanc         = 0
+var int   kayip          = 0
+var float sonKZ          = 0.0
+
+// ★ REPAINT-PROOF: Sinyal bar_index'lerini kaydet
+// var ile saklanan int değer, Pine yeniden hesaplasa bile değişmez
+// plotshape bar_index == kayıtlıBar ile tetiklenir → kalıcı
+var int   alSinyalBar     = na
+var int   stopSinyalBar   = na
+var int   tp2SinyalBar    = na
+var int   trailSinyalBar  = na
+var int   tp1SinyalBar    = na
+
+yeniGun = ta.change(time("D")) != 0
+if yeniGun
+    bugunIslemVar := false
+
+// ★ barstate.isconfirmed: sadece bar kapanışında tetikle
+alSinyal = is15dk and girisHazir and not pozisyonAcik and not bugunIslemVar and barstate.isconfirmed
+
+if alSinyal
+    pozisyonAcik  := true
+    girisFiyat    := close
+    stopFiyat     := close - d_atr14 * stopATR
+    tp1Fiyat      := close + d_atr14 * tp1ATR
+    tp2Fiyat      := close + d_atr14 * tp2ATR
+    trailingStop  := close - d_atr14 * trailATR
+    enYuksek      := close
+    tp1Ulasti     := false
+    girisBar      := bar_index
+    bugunIslemVar := true
+    alSinyalBar   := bar_index  // ★ Sinyal barını kaydet
+
+if pozisyonAcik
+    if close > enYuksek
+        enYuksek := close
+        if tp1Ulasti
+            trailingStop := math.max(trailingStop, enYuksek - d_atr14 * trailATR)
+    if not tp1Ulasti and high >= tp1Fiyat
+        tp1Ulasti := true
+        stopFiyat := girisFiyat
+        tp1SinyalBar := bar_index  // ★ TP1 barını kaydet
+
+stopYedi     = pozisyonAcik and low <= stopFiyat
+tp2Ulasti    = pozisyonAcik and high >= tp2Fiyat
+trailingYedi = pozisyonAcik and tp1Ulasti and low <= trailingStop
+satSinyal    = stopYedi or tp2Ulasti or trailingYedi
+
+if satSinyal and pozisyonAcik
+    // ★ Çıkış barlarını kaydet
+    if stopYedi
+        stopSinyalBar := bar_index
+    if tp2Ulasti and not stopYedi
+        tp2SinyalBar := bar_index
+    if trailingYedi and not stopYedi and not tp2Ulasti
+        trailSinyalBar := bar_index
+    cikisFiyat = stopYedi ? stopFiyat : tp2Ulasti ? tp2Fiyat : trailingStop
+    sonKZ := ((cikisFiyat - girisFiyat) / girisFiyat) * 100
+    if sonKZ >= 0
+        kazanc += 1
+    else
+        kayip += 1
+    pozisyonAcik := false
+
+toplamIslem = kazanc + kayip
+winRate = toplamIslem > 0 ? (kazanc * 100.0) / toplamIslem : 0.0
+aktifKZ = pozisyonAcik and not na(girisFiyat) ? ((close - girisFiyat) / girisFiyat) * 100 : 0.0
+barSayisi = pozisyonAcik and not na(girisBar) ? bar_index - girisBar : 0
+lotBuyuk = islemLimiti / close
+
+// ============================================================
+// GRAFİK — REPAINT-PROOF (bar_index == kayıtlıBar)
+// ============================================================
+// ★ plotshape koşulu: bar_index == var ile saklanan bar numarası
+// var değişken yeniden hesaplamada değişmez → label kalıcı
+plotshape(bar_index == alSinyalBar,    title="AL",    text="▲DİP AL", textcolor=color.white, style=shape.labelup,   location=location.belowbar, color=color.new(color.green, 0),  size=size.normal)
+plotshape(bar_index == stopSinyalBar,  title="Stop",  text="■STOP",   textcolor=color.white, style=shape.labeldown, location=location.abovebar, color=color.new(color.red, 0),    size=size.small)
+plotshape(bar_index == tp1SinyalBar,   title="*TP1",   text="★TP1",    textcolor=color.white, style=shape.labeldown, location=location.abovebar, color=color.new(color.green, 0),  size=size.small)
+plotshape(bar_index == tp2SinyalBar,   title="TP2",   text="★TP2",    textcolor=color.white, style=shape.labeldown, location=location.abovebar, color=color.new(color.green, 0),  size=size.small)
+plotshape(bar_index == trailSinyalBar, title="Trail",  text="◆TRAIL",  textcolor=color.white, style=shape.labeldown, location=location.abovebar, color=color.new(color.orange, 0), size=size.small)
+
+// Pusu — plotshape kalabilir (bilgilendirme, repaint sorun değil)
+plotshape(is15dk and pusuAktif and not pozisyonAcik and not bugunIslemVar, title="Pusu", text="◎", textcolor=color.yellow, style=shape.diamond, location=location.belowbar, color=color.new(color.yellow, 50), size=size.tiny)
+
+// Stop/TP çizgileri
+plot(gosterSeviyeler and pozisyonAcik ? girisFiyat : na, "Giriş", color=color.new(color.white, 30), style=plot.style_linebr, linewidth=1)
+plot(gosterSeviyeler and pozisyonAcik ? stopFiyat : na, "Stop", color=color.new(color.red, 20), style=plot.style_linebr, linewidth=2)
+plot(gosterSeviyeler and pozisyonAcik ? tp1Fiyat : na, "TP1", color=color.new(color.lime, 30), style=plot.style_linebr, linewidth=1)
+plot(gosterSeviyeler and pozisyonAcik ? tp2Fiyat : na, "TP2", color=color.new(color.green, 20), style=plot.style_linebr, linewidth=2)
+plot(gosterSeviyeler and pozisyonAcik and tp1Ulasti ? trailingStop : na, "Trailing", color=color.new(color.orange, 20), style=plot.style_linebr, linewidth=2)
+plot(ema9, "EMA 9", color=color.new(color.aqua, 40), linewidth=1)
+plot(ema21_15, "EMA 21", color=color.new(color.yellow, 40), linewidth=1)
+plot(vwapDeger, "VWAP", color=color.new(color.fuchsia, 40), linewidth=1, style=plot.style_circles)
+bgcolor(pozisyonAcik ? (aktifKZ >= 0 ? color.new(color.green, 93) : color.new(color.red, 93)) : pusuAktif ? color.new(color.yellow, 95) : na)
+
+// ============================================================
+// ANALİZ TABLOSU
+// ============================================================
+if gosterTablo and barstate.islast
+    var table tG = table.new(position.top_right, 2, 26, bgcolor=color.new(#1a1a2e, 5), border_width=1, border_color=color.new(#30305a, 20))
+
+    durumText = pozisyonAcik ? "🟢 İŞLEMDE" : pusuAktif ? "🟡 PUSU" : girisHazir ? "⚡ HAZIR" : gunlukDipOK ? "🔵 DİP TEYİTLİ" : liveDipOK ? "🟣 CANLI DİP" : "🔴 DİP TEYİT YOK"
+    durumRenk = pozisyonAcik ? color.green : pusuAktif ? color.yellow : girisHazir ? color.lime : gunlukDipOK ? color.blue : liveDipOK ? color.purple : color.red
+
+    table.cell(tG, 0, 0, "⚡ DİP GİRİŞ v6.1", text_color=color.yellow, text_size=size.normal, bgcolor=color.new(#16213e, 0))
+    table.cell(tG, 1, 0, durumText, text_color=durumRenk, text_size=size.normal, bgcolor=color.new(durumRenk, 85))
+
+    table.cell(tG, 0, 1, "── GÜNLÜK DİP (Confirmed) ──", text_color=color.fuchsia, text_size=size.normal, bgcolor=color.new(color.fuchsia, 90))
+    dSkorR = gunlukDipSkor >= 5 ? color.green : gunlukDipSkor >= 4 ? color.lime : gunlukDipSkor >= 3 ? color.yellow : color.red
+    pencereInfo = gunlukDipOK ? gunlukDipGun + " " + str.tostring(gunlukDipGunSkor) + "/7 ✓" : str.tostring(skor_d1) + "/7 ✗"
+    table.cell(tG, 1, 1, pencereInfo + " (Son " + str.tostring(pencereGun) + "g)", text_color=dSkorR, text_size=size.normal, bgcolor=color.new(color.fuchsia, 90))
+
+    table.cell(tG, 0, 2, "Dün / 2g / 3g", text_color=color.new(color.white, 20), text_size=size.normal)
+    skorDetay = str.tostring(skor_d1) + "/7" + (gunlukDipOK_d1 ? "✓" : "") + " | " + str.tostring(skor_d2) + "/7" + (gunlukDipOK_d2 ? "✓" : "") + " | " + str.tostring(skor_d3) + "/7" + (gunlukDipOK_d3 ? "✓" : "")
+    table.cell(tG, 1, 2, skorDetay, text_color=gunlukDipOK ? color.green : color.gray, text_size=size.normal)
+
+    table.cell(tG, 0, 3, "G1-G7 (" + gunlukDipGun + ")", text_color=color.new(color.white, 20), text_size=size.normal)
+    g17Text = (dg1_best ? "✓" : "✗") + "MA " + (dg2_best ? "✓" : "✗") + "Dip " + (dg3_best ? "✓" : "✗") + "Mum " + (dg4_best ? "✓" : "✗") + "Hcm " + "\n" + (dg5_best ? "✓" : "✗") + "Dön " + (dg6_best ? "✓" : "✗") + "Hft " + (dg7_best ? "✓" : "✗") + "Ich"
+    table.cell(tG, 1, 3, g17Text, text_color=gunlukDipOK ? color.green : color.gray, text_size=size.normal)
+
+    liveSkorR = skor_live >= 5 ? color.green : skor_live >= 4 ? color.lime : skor_live >= 3 ? color.yellow : color.red
+    table.cell(tG, 0, 4, "── CANLI DİP (Bugün) ──", text_color=color.purple, text_size=size.normal, bgcolor=color.new(color.purple, 90))
+    table.cell(tG, 1, 4, str.tostring(skor_live) + "/7" + (liveDipOK ? " ✓" : " ✗") + " ⚠ kapanmamış", text_color=liveSkorR, text_size=size.normal, bgcolor=color.new(color.purple, 90))
+
+    table.cell(tG, 0, 5, "G1-G7 (Canlı)", text_color=color.new(color.white, 20), text_size=size.normal)
+    liveG17 = (live_g1 ? "✓" : "✗") + "MA " + (live_g2 ? "✓" : "✗") + "Dip " + (live_g3 ? "✓" : "✗") + "Mum " + (live_g4 ? "✓" : "✗") + "Hcm " + "\n" + (live_g5 ? "✓" : "✗") + "Dön " + (g6_val ? "✓" : "✗") + "Hft " + (live_g7 ? "✓" : "✗") + "Ich"
+    table.cell(tG, 1, 5, liveG17, text_color=liveDipOK ? color.purple : color.gray, text_size=size.normal)
+
+    table.cell(tG, 0, 6, "── 15DK KRİTERLER ──", text_color=color.aqua, text_size=size.normal, bgcolor=color.new(color.aqua, 90))
+    gSkorR = girisSkoru >= 6 ? color.green : girisSkoru >= 5 ? color.lime : girisSkoru >= 4 ? color.yellow : color.red
+    table.cell(tG, 1, 6, "Giriş: " + str.tostring(girisSkoru) + "/7", text_color=gSkorR, text_size=size.normal, bgcolor=color.new(color.aqua, 90))
+
+    table.cell(tG, 0, 7, "K1: Günlük Dip", text_color=color.new(color.white, 20), text_size=size.normal)
+    table.cell(tG, 1, 7, (kriter1_gunluk ? "✓ " : "✗ ") + str.tostring(gunlukDipSkor) + "/7 (min:" + str.tostring(minGunlukDip) + ")", text_color=kriter1_gunluk ? color.green : color.red, text_size=size.normal)
+    table.cell(tG, 0, 8, "K2: EMA Çapraz", text_color=color.new(color.white, 20), text_size=size.normal)
+    emaT = emaCross ? "✓ YENİ ÇAPRAZ!" : emaYukari ? "✓ EMA9>21" : "✗ EMA9<21"
+    table.cell(tG, 1, 8, emaT, text_color=kriter2_emaTrend ? color.green : color.red, text_size=size.normal)
+    table.cell(tG, 0, 9, "K3: RSI", text_color=color.new(color.white, 20), text_size=size.normal)
+    table.cell(tG, 1, 9, (kriter3_rsi ? "✓ " : "✗ ") + str.tostring(rsi15, "#.#") + (rsiYukari ? " ↑" : " ↓"), text_color=kriter3_rsi ? color.green : color.red, text_size=size.normal)
+    table.cell(tG, 0, 10, "K4: MACD", text_color=color.new(color.white, 20), text_size=size.normal)
+    table.cell(tG, 1, 10, (kriter4_macd ? "✓ " : "✗ ") + str.tostring(macdHist15, "#.###"), text_color=kriter4_macd ? color.green : color.red, text_size=size.normal)
+    table.cell(tG, 0, 11, "K5: Hacim", text_color=color.new(color.white, 20), text_size=size.normal)
+    table.cell(tG, 1, 11, (kriter5_hacim ? "✓ " : "✗ ") + str.tostring(hacimOran, "#.##") + "x", text_color=kriter5_hacim ? color.green : color.red, text_size=size.normal)
+    table.cell(tG, 0, 12, "K6: VWAP", text_color=color.new(color.white, 20), text_size=size.normal)
+    vwapF = nz(vwapDeger) > 0 ? ((close - vwapDeger) / vwapDeger) * 100 : 0
+    table.cell(tG, 1, 12, (kriter6_vwap ? "✓ Üst" : "✗ Alt") + " " + str.tostring(vwapF, "#.##") + "%", text_color=kriter6_vwap ? color.green : color.red, text_size=size.normal)
+    table.cell(tG, 0, 13, "K7: Higher Low", text_color=color.new(color.white, 20), text_size=size.normal)
+    table.cell(tG, 1, 13, kriter7_hl ? "✓ Yükselen" : "✗ Düşen", text_color=kriter7_hl ? color.green : color.red, text_size=size.normal)
+
+    table.cell(tG, 0, 14, "── POZİSYON ──", text_color=color.yellow, text_size=size.normal, bgcolor=color.new(color.yellow, 90))
+    table.cell(tG, 1, 14, "", bgcolor=color.new(color.yellow, 90))
+
+    if pozisyonAcik
+        kzR = aktifKZ >= 0 ? color.green : color.red
+        kzEmoji = aktifKZ >= 10 ? "🚀" : aktifKZ >= 5 ? "★" : aktifKZ >= 0 ? "📈" : aktifKZ >= -3 ? "📉" : "🔻"
+        table.cell(tG, 0, 15, "Giriş", text_color=color.white, text_size=size.normal)
+        table.cell(tG, 1, 15, str.tostring(girisFiyat, format.mintick) + " TL", text_color=color.white, text_size=size.normal)
+        table.cell(tG, 0, 16, "K/Z", text_color=color.white, text_size=size.normal)
+        table.cell(tG, 1, 16, kzEmoji + " " + (aktifKZ >= 0 ? "+" : "") + str.tostring(aktifKZ, "#.##") + "% | " + str.tostring(barSayisi) + " bar", text_color=kzR, text_size=size.large)
+        table.cell(tG, 0, 17, "Stop", text_color=color.white, text_size=size.normal)
+        table.cell(tG, 1, 17, str.tostring(stopFiyat, format.mintick) + " (ATRx" + str.tostring(stopATR, "#.#") + ")" + (tp1Ulasti ? " [girişe çekildi]" : ""), text_color=color.red, text_size=size.normal)
+        table.cell(tG, 0, 18, "TP1 / TP2", text_color=color.white, text_size=size.normal)
+        table.cell(tG, 1, 18, str.tostring(tp1Fiyat, format.mintick) + (tp1Ulasti ? " ✅" : "") + " / " + str.tostring(tp2Fiyat, format.mintick), text_color=color.lime, text_size=size.normal)
+        table.cell(tG, 0, 19, "Trailing", text_color=color.white, text_size=size.normal)
+        table.cell(tG, 1, 19, tp1Ulasti ? str.tostring(trailingStop, format.mintick) + " (ATRx" + str.tostring(trailATR, "#.#") + ")" : "TP1 sonrası aktif", text_color=tp1Ulasti ? color.orange : color.gray, text_size=size.normal)
+        table.cell(tG, 0, 20, "ATR (15dk/Gün)", text_color=color.white, text_size=size.normal)
+        table.cell(tG, 1, 20, str.tostring(atr14, format.mintick) + " / " + str.tostring(d_atr14, format.mintick) + " | Max: +" + str.tostring(((enYuksek - girisFiyat) / girisFiyat) * 100, "#.##") + "%", text_color=color.aqua, text_size=size.normal)
+    else
+        table.cell(tG, 0, 15, "Durum", text_color=color.white, text_size=size.normal)
+        durumDetay = gunlukDipOK ? "Dip teyitli (" + gunlukDipGun + ") — giriş bekle" : liveDipOK ? "Canlı dip " + str.tostring(skor_live) + "/7 — kapanışı bekle" : "Dip teyit yok — sinyal kapalı"
+        durumDetayR = gunlukDipOK ? color.yellow : liveDipOK ? color.purple : color.red
+        table.cell(tG, 1, 15, durumDetay, text_color=durumDetayR, text_size=size.normal)
+        table.cell(tG, 0, 16, "Son İşlem", text_color=color.white, text_size=size.normal)
+        table.cell(tG, 1, 16, sonKZ != 0 ? (sonKZ >= 0 ? "+" : "") + str.tostring(sonKZ, "#.##") + "%" : "—", text_color=sonKZ >= 0 ? color.green : color.red, text_size=size.normal)
+        table.cell(tG, 0, 17, "ATR (15dk/Gün)", text_color=color.white, text_size=size.normal)
+        table.cell(tG, 1, 17, str.tostring(atr14, format.mintick) + " / " + str.tostring(d_atr14, format.mintick), text_color=color.white, text_size=size.normal)
+        table.cell(tG, 0, 18, "", text_size=size.normal)
+        table.cell(tG, 1, 18, "", text_size=size.normal)
+        table.cell(tG, 0, 19, "", text_size=size.normal)
+        table.cell(tG, 1, 19, "", text_size=size.normal)
+        table.cell(tG, 0, 20, "", text_size=size.normal)
+        table.cell(tG, 1, 20, "", text_size=size.normal)
+
+    table.cell(tG, 0, 21, "── BÜTÇE / BAŞARI ──", text_color=color.lime, text_size=size.normal, bgcolor=color.new(color.lime, 90))
+    table.cell(tG, 1, 21, "", bgcolor=color.new(color.lime, 90))
+    table.cell(tG, 0, 22, "İşlem Limiti", text_color=color.white, text_size=size.normal)
+    table.cell(tG, 1, 22, str.tostring(islemLimiti, "#,###") + " TL ≈ " + str.tostring(lotBuyuk, "#") + " lot", text_color=color.white, text_size=size.normal)
+    wrR = winRate >= 55 ? color.green : winRate >= 40 ? color.yellow : color.red
+    table.cell(tG, 0, 23, "W/L", text_color=color.white, text_size=size.normal)
+    table.cell(tG, 1, 23, "%" + str.tostring(winRate, "#.#") + " (" + str.tostring(kazanc) + "W / " + str.tostring(kayip) + "L)", text_color=wrR, text_size=size.normal)
+    table.cell(tG, 0, 24, "Fiyat | Tarih", text_color=color.new(color.white, 40), text_size=size.normal)
+    table.cell(tG, 1, 24, str.tostring(close, format.mintick) + " | " + str.format("{0,date,dd/MM HH:mm}", time), text_color=color.white, text_size=size.normal)
+
+
+// ============================================================
+// SIGNALCONVERT ALARM SİSTEMİ — JSON Webhook
+// ============================================================
+i_alert_mode = input.string(defval=alert.freq_once_per_bar_close, title='Alerts Mode', options=[alert.freq_all, alert.freq_once_per_bar_close, alert.freq_once_per_bar])
+
+// Float'ı sabit ondalık ile stringe çeviren yardımcı (nokta ayırıcı)
+f_fmt(x) => str.tostring(x, format.mintick)
+
+// ─────────────────────────────────────────────────────────────
+// DİP ALIM SİNYALİ → JSON
+// ─────────────────────────────────────────────────────────────
+if alSinyal
+    dipAlJson = '{' +
+        '"event":"DIP_AL",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"15dk Dip Alım",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"change_pct":' + str.tostring(gunluk_degisim, "#.##") + ',' +
+        '"entry":' + f_fmt(close) + ',' +
+        '"target":' + f_fmt(close + d_atr14 * tp1ATR) + ',' +
+        '"tp2":' + f_fmt(close + d_atr14 * tp2ATR) + ',' +
+        '"stop":' + f_fmt(close - d_atr14 * stopATR) + ',' +
+        '"atr":' + f_fmt(d_atr14) + ',' +
+        '"gunluk_skor":' + str.tostring(gunlukDipGunSkor) + ',' +
+        '"gunluk_gun":"' + gunlukDipGun + '",' +
+        '"canli_skor":' + str.tostring(skor_live) + ',' +
+        '"giris_skor":' + str.tostring(girisSkoru) + ',' +
+        '"win_rate":' + str.tostring(winRate, "#.#") + ',' +
+        '"kazanc":' + str.tostring(kazanc) + ',' +
+        '"kayip":' + str.tostring(kayip) +
+        '}'
+    alert(dipAlJson, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// DİP PUSU → JSON
+// ─────────────────────────────────────────────────────────────
+if pusuAktif and not pozisyonAcik and not bugunIslemVar and show_pusu and barstate.isconfirmed
+    pusuJson = '{' +
+        '"event":"PUSU",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Koşullar hazırlanıyor",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"gunluk_skor":' + str.tostring(gunlukDipGunSkor) + ',' +
+        '"giris_skor":' + str.tostring(girisSkoru) +
+        '}'
+    alert(pusuJson, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// HEDEF 1 (TP1) → JSON
+// ─────────────────────────────────────────────────────────────
+tp1Yeni_v2 = pozisyonAcik and not tp1Ulasti[1] and show_hedef and high >= tp1Fiyat
+if tp1Yeni_v2
+    tp1Kar = ((tp1Fiyat - girisFiyat) / girisFiyat) * 100
+    tp1Json = '{' +
+        '"event":"TP1",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Hedef 1 ulaşıldı",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"entry":' + f_fmt(girisFiyat) + ',' +
+        '"target":' + f_fmt(tp1Fiyat) + ',' +
+        '"exit":' + f_fmt(tp1Fiyat) + ',' +
+        '"stop":' + f_fmt(girisFiyat) + ',' +
+        '"kar_pct":' + str.tostring(tp1Kar, "#.##") +
+        '}'
+    alert(tp1Json, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// HEDEF 2 (TP2) → JSON
+// ─────────────────────────────────────────────────────────────
+if tp2Ulasti and pozisyonAcik and show_hedef
+    tp2Kar = ((tp2Fiyat - girisFiyat) / girisFiyat) * 100
+    tp2Json = '{' +
+        '"event":"TP2",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Hedef 2 ulaşıldı",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"entry":' + f_fmt(girisFiyat) + ',' +
+        '"target":' + f_fmt(tp2Fiyat) + ',' +
+        '"exit":' + f_fmt(tp2Fiyat) + ',' +
+        '"kar_pct":' + str.tostring(tp2Kar, "#.##") +
+        '}'
+    alert(tp2Json, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// STOP → JSON
+// ─────────────────────────────────────────────────────────────
+if stopYedi and pozisyonAcik
+    stopKZ_v2 = ((stopFiyat - girisFiyat) / girisFiyat) * 100
+    stopJson = '{' +
+        '"event":"STOP",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Stop tetiklendi",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"entry":' + f_fmt(girisFiyat) + ',' +
+        '"stop":' + f_fmt(stopFiyat) + ',' +
+        '"exit":' + f_fmt(stopFiyat) + ',' +
+        '"kar_pct":' + str.tostring(stopKZ_v2, "#.##") +
+        '}'
+    alert(stopJson, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// TRAILING → JSON
+// ─────────────────────────────────────────────────────────────
+if trailingYedi and pozisyonAcik and not stopYedi and not tp2Ulasti and show_trailing
+    trailKZ_v2 = ((trailingStop - girisFiyat) / girisFiyat) * 100
+    trailJson = '{' +
+        '"event":"TRAILING",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Trailing çıkış",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"entry":' + f_fmt(girisFiyat) + ',' +
+        '"stop":' + f_fmt(trailingStop) + ',' +
+        '"exit":' + f_fmt(trailingStop) + ',' +
+        '"kar_pct":' + str.tostring(trailKZ_v2, "#.##") +
+        '}'
+    alert(trailJson, freq=i_alert_mode)
+
+alertcondition(alSinyal, title="▲ DİP AL", message="DİP ALIM SİNYALİ")
+alertcondition(pusuAktif and not pozisyonAcik, title="◎ PUSU", message="PUSU — koşullar hazırlanıyor")
+alertcondition(stopYedi, title="■ STOP", message="STOP tetiklendi")
+alertcondition(tp1Yeni_v2, title="★ HEDEF 1", message="HEDEF 1 ulaşıldı")
+alertcondition(tp2Ulasti, title="★★ HEDEF 2", message="HEDEF 2 ulaşıldı")
+alertcondition(trailingYedi, title="◆ TRAİLİNG", message="Trailing stop tetiklendi")
