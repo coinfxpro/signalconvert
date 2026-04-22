@@ -14,5 +14,5 @@ data
 *.md
 !README.md
 *.pine
-*.png
 *.jpg
+!logo.png
