@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Kart Önizleme{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-1">Kart Önizleme</h1>
+<p class="text-slate-400 text-sm mb-4">Sol tarafa örnek JSON yapıştır, sağda kart nasıl görünecek görür.</p>
+
+<div class="grid md:grid-cols-2 gap-6">
+  <div>
+    <form id="pf" class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <textarea name="payload" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 font-mono text-xs h-96">{
+  "event": "DIP_AL",
+  "symbol": "BMSCH",
+  "subtitle": "15M %3 Kâr Al",
+  "price": 19.25,
+  "change_pct": 4.11,
+  "entry": 19.25,
+  "target": 20.72,
+  "stop": 18.15,
+  "rr": 1.82,
+  "confidence": 74.9
+}</textarea>
+      <button class="mt-3 bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-lg font-semibold">Render Et</button>
+    </form>
+  </div>
+  <div>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <img id="out" src="" alt="" class="w-full rounded-lg" />
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('pf').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const r = await fetch('/preview/render', { method: 'POST', body: fd });
+  if (!r.ok) { alert('Render hatası: ' + (await r.text())); return; }
+  const blob = await r.blob();
+  document.getElementById('out').src = URL.createObjectURL(blob);
+});
+</script>
+{% endblock %}

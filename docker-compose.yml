@@ -1,0 +1,18 @@
+services:
+  signalconvert:
+    build: .
+    container_name: signalconvert
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      SECRET_KEY: ${SECRET_KEY:-change-me}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:5000}
+      DATABASE_URL: sqlite:///data/signalconvert.db
+      IMAGES_DIR: data/images
+    volumes:
+      - signalconvert_data:/app/data
+
+volumes:
+  signalconvert_data:

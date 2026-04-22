@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}SignalConvert{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eef6ff', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    .pill { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 0.75rem; border-radius: 9999px; font-weight: 600; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  {% if request.cookies.get('sc_session') %}
+  <nav class="bg-slate-900 border-b border-slate-800">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-6">
+      <a href="/" class="font-bold text-lg tracking-tight flex items-center gap-2">
+        <span class="inline-block w-7 h-7 rounded bg-brand-500 text-white grid place-items-center">S</span>
+        SignalConvert
+      </a>
+      <div class="flex items-center gap-4 text-sm">
+        <a href="/" class="hover:text-brand-500">Dashboard</a>
+        <a href="/bots/new" class="hover:text-brand-500">Yeni Bot</a>
+        <a href="/messages" class="hover:text-brand-500">Mesajlar</a>
+        <a href="/preview" class="hover:text-brand-500">Kart Önizleme</a>
+      </div>
+      <div class="ml-auto">
+        <form action="/logout" method="post"><button class="text-sm text-slate-400 hover:text-red-400">Çıkış</button></form>
+      </div>
+    </div>
+  </nav>
+  {% endif %}
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

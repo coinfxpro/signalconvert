@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Mesaj #{{ m.id }}{% endblock %}
+{% block content %}
+<a href="/messages" class="text-sm text-brand-500 hover:underline">← Tüm mesajlar</a>
+<h1 class="text-2xl font-bold mt-2 mb-1">Mesaj #{{ m.id }}</h1>
+<div class="text-slate-400 text-sm mb-6">{{ m.created_at.strftime('%d.%m.%Y %H:%M:%S') }} · {{ bot.name if bot else '—' }}</div>
+
+<div class="grid md:grid-cols-2 gap-6">
+  <div>
+    <h2 class="font-semibold mb-2">Gönderilen Kart</h2>
+    {% if m.image_path %}
+      <img src="/images/{{ m.image_path }}" alt="card" class="rounded-xl border border-slate-800 w-full" />
+    {% else %}
+      <div class="bg-slate-900 border border-slate-800 border-dashed rounded-xl p-10 text-center text-slate-500">Görsel yok.</div>
+    {% endif %}
+    {% if m.caption %}
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-3 mt-3 text-sm">
+      <div class="text-xs text-slate-400 mb-1">Caption</div>
+      <div>{{ m.caption|safe }}</div>
+    </div>
+    {% endif %}
+  </div>
+  <div>
+    <h2 class="font-semibold mb-2">Durum</h2>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2 text-sm">
+      <div><span class="text-slate-400">Olay:</span> <span class="pill bg-slate-800 border border-slate-700">{{ m.event_type }}</span></div>
+      <div><span class="text-slate-400">Sembol:</span> <span class="font-mono">{{ m.symbol or '—' }}</span></div>
+      <div><span class="text-slate-400">Durum:</span>
+        {% if m.status == 'sent' %}<span class="pill bg-emerald-900/40 text-emerald-300">sent</span>
+        {% elif m.status == 'failed' %}<span class="pill bg-red-900/40 text-red-300">failed</span>
+        {% else %}<span class="pill bg-slate-800">{{ m.status }}</span>{% endif %}
+      </div>
+      <div><span class="text-slate-400">İşleme süresi:</span> {{ m.processing_ms or '—' }} ms</div>
+      <div><span class="text-slate-400">Telegram mesaj ID:</span> {{ m.telegram_message_id or '—' }}</div>
+      {% if m.error %}<div class="text-red-300 break-words"><span class="text-slate-400">Hata:</span> {{ m.error }}</div>{% endif %}
+    </div>
+
+    <h2 class="font-semibold mb-2 mt-6">Gelen Ham JSON</h2>
+    <pre class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-xs overflow-auto max-h-96">{{ parsed }}</pre>
+  </div>
+</div>
+{% endblock %}

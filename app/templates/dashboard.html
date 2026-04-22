@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · SignalConvert{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-bold">Dashboard</h1>
+    <p class="text-slate-400 text-sm">Botlarını yönet, webhook URL'lerini al, mesaj geçmişini izle.</p>
+  </div>
+  <a href="/bots/new" class="bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-lg font-semibold">+ Yeni Bot</a>
+</div>
+
+<div class="grid md:grid-cols-4 gap-4 mb-8">
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="text-xs text-slate-400 uppercase">Botlar</div>
+    <div class="text-3xl font-bold mt-1">{{ bots|length }}</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="text-xs text-slate-400 uppercase">Gelen</div>
+    <div class="text-3xl font-bold mt-1">{{ total_recv }}</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="text-xs text-slate-400 uppercase">Gönderilen</div>
+    <div class="text-3xl font-bold mt-1 text-emerald-400">{{ total_sent }}</div>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <div class="text-xs text-slate-400 uppercase">Başarısız</div>
+    <div class="text-3xl font-bold mt-1 text-red-400">{{ total_fail }}</div>
+  </div>
+</div>
+
+<section class="mb-10">
+  <h2 class="text-lg font-semibold mb-3">Botlar</h2>
+  {% if bots %}
+  <div class="grid md:grid-cols-2 gap-4">
+    {% for b in bots %}
+    <a href="/bots/{{ b.id }}" class="block bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-brand-500 transition">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="w-2.5 h-2.5 rounded-full {% if b.active %}bg-emerald-500{% else %}bg-slate-500{% endif %}"></span>
+        <div class="font-semibold">{{ b.name }}</div>
+      </div>
+      {% if b.description %}<div class="text-slate-400 text-sm mb-3">{{ b.description }}</div>{% endif %}
+      <div class="text-xs text-slate-500 font-mono truncate">{{ public_base_url }}/webhook/{{ b.webhook_slug }}?secret=…</div>
+      <div class="flex gap-4 text-xs text-slate-400 mt-3">
+        <span>Chat: <span class="font-mono text-slate-300">{{ b.telegram_chat_id }}</span></span>
+        <span>Gönderilen: <span class="text-emerald-400">{{ b.total_sent }}</span></span>
+        <span>Hata: <span class="text-red-400">{{ b.total_failed }}</span></span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="bg-slate-900 border border-slate-800 border-dashed rounded-xl p-10 text-center">
+    <p class="text-slate-400 mb-4">Henüz bot yok. İlk botunu ekleyerek başla.</p>
+    <a href="/bots/new" class="bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-lg font-semibold">+ Yeni Bot</a>
+  </div>
+  {% endif %}
+</section>
+
+<section>
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-lg font-semibold">Son Mesajlar</h2>
+    <a href="/messages" class="text-sm text-brand-500 hover:underline">Tümü →</a>
+  </div>
+  <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-800/50 text-slate-400 text-xs uppercase">
+        <tr>
+          <th class="px-4 py-2 text-left">Zaman</th>
+          <th class="px-4 py-2 text-left">Bot</th>
+          <th class="px-4 py-2 text-left">Olay</th>
+          <th class="px-4 py-2 text-left">Sembol</th>
+          <th class="px-4 py-2 text-left">Durum</th>
+          <th class="px-4 py-2 text-right">ms</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in recent %}
+        <tr class="border-t border-slate-800 hover:bg-slate-800/30">
+          <td class="px-4 py-2 text-slate-400">{{ m.created_at.strftime('%d.%m %H:%M:%S') }}</td>
+          <td class="px-4 py-2">#{{ m.bot_id }}</td>
+          <td class="px-4 py-2"><span class="pill bg-slate-800 border border-slate-700">{{ m.event_type }}</span></td>
+          <td class="px-4 py-2 font-mono">{{ m.symbol or '—' }}</td>
+          <td class="px-4 py-2">
+            {% if m.status == 'sent' %}<span class="pill bg-emerald-900/40 text-emerald-300">sent</span>
+            {% elif m.status == 'failed' %}<span class="pill bg-red-900/40 text-red-300">failed</span>
+            {% else %}<span class="pill bg-slate-800 text-slate-300">{{ m.status }}</span>{% endif %}
+          </td>
+          <td class="px-4 py-2 text-right text-slate-400">{{ m.processing_ms or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">Henüz mesaj yok.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

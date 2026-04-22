@@ -1,0 +1,143 @@
+// ============================================================
+// ALFA DİP GİRİŞ v6.1-SC — SignalConvert webhook için JSON çıkış
+// ============================================================
+// NOT: Bu dosya orijinal DipAlert.pine'ın SADECE Telegram bölümünü değiştirir.
+// Kodun üstündeki mantık (gösterge + pozisyon yönetimi) aynı kaldı;
+// sadece alertlerin mesaj formatı JSON'a çevrildi.
+//
+// Kullanım:
+// 1) Bu göstergeyi TradingView'e ekle.
+// 2) "Alert oluştur" → Koşul: "any alert() function call"
+// 3) Webhook URL: SignalConvert dashboard'daki bot webhook URL'i
+// 4) Mesaj alanı: {{message}} (Pine tarafından doldurulur)
+// ============================================================
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// Bu dosyayı aç, orijinal DipAlert.pine'daki 546. satırdan
+// (============================================================ TELEGRAM)
+// dosya sonuna kadar olan bloğu SİL ve yerine BU bloğu yapıştır.
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+// ============================================================
+// SIGNALCONVERT ALARM SİSTEMİ — JSON Webhook
+// ============================================================
+i_alert_mode = input.string(defval=alert.freq_once_per_bar_close, title='Alerts Mode', options=[alert.freq_all, alert.freq_once_per_bar_close, alert.freq_once_per_bar])
+
+// Float'ı sabit ondalık ile stringe çeviren yardımcı (nokta ayırıcı)
+f_fmt(x) => str.tostring(x, format.mintick)
+
+// ─────────────────────────────────────────────────────────────
+// DİP ALIM SİNYALİ → JSON
+// ─────────────────────────────────────────────────────────────
+if alSinyal
+    dipAlJson = '{' +
+        '"event":"DIP_AL",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"15dk Dip Alım",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"change_pct":' + str.tostring(gunluk_degisim, "#.##") + ',' +
+        '"entry":' + f_fmt(close) + ',' +
+        '"target":' + f_fmt(close + d_atr14 * tp1ATR) + ',' +
+        '"tp2":' + f_fmt(close + d_atr14 * tp2ATR) + ',' +
+        '"stop":' + f_fmt(close - d_atr14 * stopATR) + ',' +
+        '"atr":' + f_fmt(d_atr14) + ',' +
+        '"gunluk_skor":' + str.tostring(gunlukDipGunSkor) + ',' +
+        '"gunluk_gun":"' + gunlukDipGun + '",' +
+        '"canli_skor":' + str.tostring(skor_live) + ',' +
+        '"giris_skor":' + str.tostring(girisSkoru) + ',' +
+        '"win_rate":' + str.tostring(winRate, "#.#") + ',' +
+        '"kazanc":' + str.tostring(kazanc) + ',' +
+        '"kayip":' + str.tostring(kayip) +
+        '}'
+    alert(dipAlJson, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// DİP PUSU → JSON
+// ─────────────────────────────────────────────────────────────
+if pusuAktif and not pozisyonAcik and not bugunIslemVar and show_pusu and barstate.isconfirmed
+    pusuJson = '{' +
+        '"event":"PUSU",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Koşullar hazırlanıyor",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"gunluk_skor":' + str.tostring(gunlukDipGunSkor) + ',' +
+        '"giris_skor":' + str.tostring(girisSkoru) +
+        '}'
+    alert(pusuJson, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// HEDEF 1 (TP1) → JSON
+// ─────────────────────────────────────────────────────────────
+tp1Yeni_v2 = pozisyonAcik and not tp1Ulasti[1] and show_hedef and high >= tp1Fiyat
+if tp1Yeni_v2
+    tp1Kar = ((tp1Fiyat - girisFiyat) / girisFiyat) * 100
+    tp1Json = '{' +
+        '"event":"TP1",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Hedef 1 ulaşıldı",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"entry":' + f_fmt(girisFiyat) + ',' +
+        '"target":' + f_fmt(tp1Fiyat) + ',' +
+        '"exit":' + f_fmt(tp1Fiyat) + ',' +
+        '"stop":' + f_fmt(girisFiyat) + ',' +
+        '"kar_pct":' + str.tostring(tp1Kar, "#.##") +
+        '}'
+    alert(tp1Json, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// HEDEF 2 (TP2) → JSON
+// ─────────────────────────────────────────────────────────────
+if tp2Ulasti and pozisyonAcik and show_hedef
+    tp2Kar = ((tp2Fiyat - girisFiyat) / girisFiyat) * 100
+    tp2Json = '{' +
+        '"event":"TP2",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Hedef 2 ulaşıldı",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"entry":' + f_fmt(girisFiyat) + ',' +
+        '"target":' + f_fmt(tp2Fiyat) + ',' +
+        '"exit":' + f_fmt(tp2Fiyat) + ',' +
+        '"kar_pct":' + str.tostring(tp2Kar, "#.##") +
+        '}'
+    alert(tp2Json, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// STOP → JSON
+// ─────────────────────────────────────────────────────────────
+if stopYedi and pozisyonAcik
+    stopKZ_v2 = ((stopFiyat - girisFiyat) / girisFiyat) * 100
+    stopJson = '{' +
+        '"event":"STOP",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Stop tetiklendi",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"entry":' + f_fmt(girisFiyat) + ',' +
+        '"stop":' + f_fmt(stopFiyat) + ',' +
+        '"exit":' + f_fmt(stopFiyat) + ',' +
+        '"kar_pct":' + str.tostring(stopKZ_v2, "#.##") +
+        '}'
+    alert(stopJson, freq=i_alert_mode)
+
+// ─────────────────────────────────────────────────────────────
+// TRAILING → JSON
+// ─────────────────────────────────────────────────────────────
+if trailingYedi and pozisyonAcik and not stopYedi and not tp2Ulasti and show_trailing
+    trailKZ_v2 = ((trailingStop - girisFiyat) / girisFiyat) * 100
+    trailJson = '{' +
+        '"event":"TRAILING",' +
+        '"symbol":"' + syminfo.ticker + '",' +
+        '"subtitle":"Trailing çıkış",' +
+        '"price":' + f_fmt(close) + ',' +
+        '"entry":' + f_fmt(girisFiyat) + ',' +
+        '"stop":' + f_fmt(trailingStop) + ',' +
+        '"exit":' + f_fmt(trailingStop) + ',' +
+        '"kar_pct":' + str.tostring(trailKZ_v2, "#.##") +
+        '}'
+    alert(trailJson, freq=i_alert_mode)
+
+alertcondition(alSinyal, title="▲ DİP AL", message="DİP ALIM SİNYALİ")
+alertcondition(pusuAktif and not pozisyonAcik, title="◎ PUSU", message="PUSU — koşullar hazırlanıyor")
+alertcondition(stopYedi, title="■ STOP", message="STOP tetiklendi")
+alertcondition(tp1Yeni_v2, title="★ HEDEF 1", message="HEDEF 1 ulaşıldı")
+alertcondition(tp2Ulasti, title="★★ HEDEF 2", message="HEDEF 2 ulaşıldı")
+alertcondition(trailingYedi, title="◆ TRAİLİNG", message="Trailing stop tetiklendi")

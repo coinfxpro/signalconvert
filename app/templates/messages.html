@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Mesajlar · SignalConvert{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-1">Mesajlar</h1>
+<p class="text-slate-400 text-sm mb-4">Son 200 kayıt gösteriliyor.</p>
+
+<form method="get" class="flex gap-3 mb-4 text-sm">
+  <select name="bot_id" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5">
+    <option value="">Tüm botlar</option>
+    {% for b in bots %}<option value="{{ b.id }}" {% if filter_bot==b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+  </select>
+  <select name="status" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5">
+    <option value="">Tüm durumlar</option>
+    <option value="sent" {% if filter_status=='sent' %}selected{% endif %}>sent</option>
+    <option value="failed" {% if filter_status=='failed' %}selected{% endif %}>failed</option>
+    <option value="pending" {% if filter_status=='pending' %}selected{% endif %}>pending</option>
+  </select>
+  <button class="bg-brand-600 hover:bg-brand-700 px-3 rounded">Filtrele</button>
+</form>
+
+<div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-800/50 text-slate-400 text-xs uppercase">
+      <tr>
+        <th class="px-4 py-2 text-left">Zaman</th>
+        <th class="px-4 py-2 text-left">Bot</th>
+        <th class="px-4 py-2 text-left">Olay</th>
+        <th class="px-4 py-2 text-left">Sembol</th>
+        <th class="px-4 py-2 text-left">Durum</th>
+        <th class="px-4 py-2 text-right">ms</th>
+        <th class="px-4 py-2"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in items %}
+      <tr class="border-t border-slate-800 hover:bg-slate-800/30">
+        <td class="px-4 py-2 text-slate-400">{{ m.created_at.strftime('%d.%m %H:%M:%S') }}</td>
+        <td class="px-4 py-2"><a href="/bots/{{ m.bot_id }}" class="text-brand-500 hover:underline">#{{ m.bot_id }}</a></td>
+        <td class="px-4 py-2"><span class="pill bg-slate-800 border border-slate-700">{{ m.event_type }}</span></td>
+        <td class="px-4 py-2 font-mono">{{ m.symbol or '—' }}</td>
+        <td class="px-4 py-2">
+          {% if m.status == 'sent' %}<span class="pill bg-emerald-900/40 text-emerald-300">sent</span>
+          {% elif m.status == 'failed' %}<span class="pill bg-red-900/40 text-red-300">failed</span>
+          {% else %}<span class="pill bg-slate-800">{{ m.status }}</span>{% endif %}
+        </td>
+        <td class="px-4 py-2 text-right text-slate-400">{{ m.processing_ms or '' }}</td>
+        <td class="px-4 py-2 text-right"><a href="/messages/{{ m.id }}" class="text-brand-500 hover:underline">Detay</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">Kayıt yok.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
