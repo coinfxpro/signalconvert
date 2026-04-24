@@ -505,6 +505,10 @@ def render_card(data: CardData) -> Image.Image:
     if l1_parts:
         lines.append("      ".join(l1_parts))
 
+    # TP1 olayında: stop'un break-even'a çekildiğini bildir
+    if data.event_type.upper() == "TP1" and data.entry is not None:
+        lines.append(f"Stop → Giriş seviyesine çekildi  ({_fmt_price(data.entry)} — Break-Even)")
+
     l2_parts = []
     if data.basari_oran is not None:
         bo = f"Başarı: %{data.basari_oran:.1f}".replace(".", ",")
