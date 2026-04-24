@@ -88,7 +88,7 @@ if tp1Yeni_v2
         '"entry":' + f_fmt(girisFiyat) + ',' +
         '"target":' + f_fmt(tp1Fiyat) + ',' +
         '"exit":' + f_fmt(tp1Fiyat) + ',' +
-        '"stop":' + f_fmt(girisFiyat) + ',' +
+        '"stop":' + f_fmt(stopFiyat) + ',' +
         '"kar_pct":' + str.tostring(tp1Kar, "#.##") +
         '}'
     alert(tp1Json, freq=i_alert_mode)
@@ -106,6 +106,7 @@ if tp2Ulasti and pozisyonAcik and show_hedef
         '"entry":' + f_fmt(girisFiyat) + ',' +
         '"target":' + f_fmt(tp2Fiyat) + ',' +
         '"exit":' + f_fmt(tp2Fiyat) + ',' +
+        '"stop":' + f_fmt(stopFiyat) + ',' +
         '"kar_pct":' + str.tostring(tp2Kar, "#.##") +
         '}'
     alert(tp2Json, freq=i_alert_mode)
