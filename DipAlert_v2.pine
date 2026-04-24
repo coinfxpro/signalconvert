@@ -33,6 +33,14 @@ f_bools7(a, b, c, d, e, f, g) =>
      (g ? "1" : "0")
 
 // ─────────────────────────────────────────────────────────────
+// Orijinal stop fiyatını saklayan değişken
+// (Normal stopFiyat TP1'de break-even'a çekildiği için R:R bozuluyor)
+// ─────────────────────────────────────────────────────────────
+var float orijinalStop = na
+if alSinyal
+    orijinalStop := close - d_atr14 * stopATR
+
+// ─────────────────────────────────────────────────────────────
 // DİP ALIM SİNYALİ → JSON
 // ─────────────────────────────────────────────────────────────
 if alSinyal
@@ -88,7 +96,7 @@ if tp1Yeni_v2
         '"entry":' + f_fmt(girisFiyat) + ',' +
         '"target":' + f_fmt(tp1Fiyat) + ',' +
         '"exit":' + f_fmt(tp1Fiyat) + ',' +
-        '"stop":' + f_fmt(stopFiyat) + ',' +
+        '"stop":' + f_fmt(orijinalStop) + ',' +
         '"kar_pct":' + str.tostring(tp1Kar, "#.##") +
         '}'
     alert(tp1Json, freq=i_alert_mode)
@@ -106,7 +114,7 @@ if tp2Ulasti and pozisyonAcik and show_hedef
         '"entry":' + f_fmt(girisFiyat) + ',' +
         '"target":' + f_fmt(tp2Fiyat) + ',' +
         '"exit":' + f_fmt(tp2Fiyat) + ',' +
-        '"stop":' + f_fmt(stopFiyat) + ',' +
+        '"stop":' + f_fmt(orijinalStop) + ',' +
         '"kar_pct":' + str.tostring(tp2Kar, "#.##") +
         '}'
     alert(tp2Json, freq=i_alert_mode)
