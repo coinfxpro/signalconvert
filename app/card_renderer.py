@@ -485,6 +485,13 @@ def render_card(data: CardData) -> Image.Image:
     ib_font = _font(17, bold=True)
     lines: List[str] = []
 
+    # R:R — Pine göndermediyse entry/target/stop'tan hesapla
+    rr_val = data.rr
+    if rr_val is None and data.entry is not None and data.target is not None and data.stop is not None:
+        risk = data.entry - data.stop
+        if risk > 0:
+            rr_val = (data.target - data.entry) / risk
+
     l1_parts = []
     if data.price is not None:
         up = data.change_pct is not None and data.change_pct >= 0
@@ -493,6 +500,8 @@ def render_card(data: CardData) -> Image.Image:
         l1_parts.append(f"Anlık: {_fmt_price(data.price)}{pct}{arrow}")
     if data.atr_daily is not None:
         l1_parts.append(f"ATR(Gün): {data.atr_daily:.2f}".replace(".", ","))
+    if rr_val is not None:
+        l1_parts.append(f"R:R  {rr_val:.2f}".replace(".", ","))
     if l1_parts:
         lines.append("      ".join(l1_parts))
 
@@ -502,14 +511,6 @@ def render_card(data: CardData) -> Image.Image:
         if data.kazanc is not None and data.kayip is not None:
             bo += f"  ({data.kazanc}K / {data.kayip}L)"
         l2_parts.append(bo)
-    # R:R — Pine göndermediyse entry/target/stop'tan hesapla
-    rr_val = data.rr
-    if rr_val is None and data.entry is not None and data.target is not None and data.stop is not None:
-        risk = data.entry - data.stop
-        if risk > 0:
-            rr_val = (data.target - data.entry) / risk
-    if rr_val is not None:
-        l2_parts.append(f"R:R  {rr_val:.2f}".replace(".", ","))
     if l2_parts:
         lines.append("      ".join(l2_parts))
 
