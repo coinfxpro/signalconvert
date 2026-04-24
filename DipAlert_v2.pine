@@ -26,6 +26,12 @@ i_alert_mode = input.string(defval=alert.freq_once_per_bar_close, title='Alerts 
 // Float'ı sabit ondalık ile stringe çeviren yardımcı (nokta ayırıcı)
 f_fmt(x) => str.tostring(x, format.mintick)
 
+// 7 bool → "1,0,1,1,0,1,1" CSV string (kart kriter paneli için)
+f_bools7(a, b, c, d, e, f, g) =>
+    (a ? "1" : "0") + "," + (b ? "1" : "0") + "," + (c ? "1" : "0") + "," +
+     (d ? "1" : "0") + "," + (e ? "1" : "0") + "," + (f ? "1" : "0") + "," +
+     (g ? "1" : "0")
+
 // ─────────────────────────────────────────────────────────────
 // DİP ALIM SİNYALİ → JSON
 // ─────────────────────────────────────────────────────────────
@@ -33,7 +39,7 @@ if alSinyal
     dipAlJson = '{' +
         '"event":"DIP_AL",' +
         '"symbol":"' + syminfo.ticker + '",' +
-        '"subtitle":"15dk Dip Alım",' +
+        '"subtitle":"15dk Koşullar oluştu",' +
         '"price":' + f_fmt(close) + ',' +
         '"change_pct":' + str.tostring(gunluk_degisim, "#.##") + ',' +
         '"entry":' + f_fmt(close) + ',' +
@@ -43,8 +49,11 @@ if alSinyal
         '"atr":' + f_fmt(d_atr14) + ',' +
         '"gunluk_skor":' + str.tostring(gunlukDipGunSkor) + ',' +
         '"gunluk_gun":"' + gunlukDipGun + '",' +
+        '"gunluk_kriterler":"' + f_bools7(dg1_best, dg2_best, dg3_best, dg4_best, dg5_best, dg6_best, dg7_best) + '",' +
         '"canli_skor":' + str.tostring(skor_live) + ',' +
+        '"canli_kriterler":"' + f_bools7(live_g1, live_g2, live_g3, live_g4, live_g5, g6_val, live_g7) + '",' +
         '"giris_skor":' + str.tostring(girisSkoru) + ',' +
+        '"giris_kriterler":"' + f_bools7(kriter1_gunluk, kriter2_emaTrend, kriter3_rsi, kriter4_macd, kriter5_hacim, kriter6_vwap, kriter7_hl) + '",' +
         '"win_rate":' + str.tostring(winRate, "#.#") + ',' +
         '"kazanc":' + str.tostring(kazanc) + ',' +
         '"kayip":' + str.tostring(kayip) +

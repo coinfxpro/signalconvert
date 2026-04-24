@@ -47,7 +47,7 @@ THEMES = {
         "bg_top": (15, 120, 90), "bg_bottom": (8, 70, 55),
         "accent": (120, 255, 180),
         "header_bg": (34, 197, 94), "header_text": (255, 255, 255),
-        "header_label": "DİP ALIM SİNYALİ",
+        "header_label": "POT. DİP ALIM SİNYALİ",
         "box_bg": (6, 60, 45),
     },
     "hedef": {
@@ -503,14 +503,17 @@ def render_card(data: CardData) -> Image.Image:
         draw.text((pad_x, y), ln, font=ib_font, fill=(255, 255, 255, 230))
         y += 26
 
-    # ---- Ayırıcı + uyarı ----
-    warning_y = CARD_H - 80
+    # ---- Ayırıcı + uyarı (2 satır) ----
+    warning_y = CARD_H - 88
     draw.line((pad_x, warning_y, CARD_W - pad_x, warning_y),
               fill=(255, 255, 255, 40), width=1)
-    warn_font = _font(15, bold=True)
-    draw.text((pad_x, warning_y + 12),
+    warn_font = _font(14, bold=True)
+    draw.text((pad_x, warning_y + 10),
               "!  Bu sinyal yatırım tavsiyesi değildir.",
               font=warn_font, fill=(255, 230, 160, 230))
+    draw.text((pad_x, warning_y + 30),
+              "   Potansiyel hesaplamalara dayanmaktadır.",
+              font=warn_font, fill=(255, 230, 160, 200))
 
     # Sağ alt: durum rozeti + marka
     status_badge = _status_badge_text(data)
