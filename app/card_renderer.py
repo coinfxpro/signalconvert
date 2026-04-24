@@ -501,7 +501,7 @@ def render_card(data: CardData) -> Image.Image:
     if data.atr_daily is not None:
         l1_parts.append(f"ATR(Gün): {data.atr_daily:.2f}".replace(".", ","))
     if rr_val is not None:
-        l1_parts.append(f"R:R  {rr_val:.2f}".replace(".", ","))
+        l1_parts.append(f"R:R  {rr_val:.2f} (Risk Ödül Oranı)".replace(".", ","))
     if l1_parts:
         lines.append("      ".join(l1_parts))
 
