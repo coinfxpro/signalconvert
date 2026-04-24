@@ -502,8 +502,14 @@ def render_card(data: CardData) -> Image.Image:
         if data.kazanc is not None and data.kayip is not None:
             bo += f"  ({data.kazanc}K / {data.kayip}L)"
         l2_parts.append(bo)
-    if data.rr is not None:
-        l2_parts.append(f"R:R  {data.rr:.2f}".replace(".", ","))
+    # R:R — Pine göndermediyse entry/target/stop'tan hesapla
+    rr_val = data.rr
+    if rr_val is None and data.entry is not None and data.target is not None and data.stop is not None:
+        risk = data.entry - data.stop
+        if risk > 0:
+            rr_val = (data.target - data.entry) / risk
+    if rr_val is not None:
+        l2_parts.append(f"R:R  {rr_val:.2f}".replace(".", ","))
     if l2_parts:
         lines.append("      ".join(l2_parts))
 
