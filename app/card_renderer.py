@@ -47,7 +47,7 @@ THEMES = {
         "bg_top": (15, 120, 90), "bg_bottom": (8, 70, 55),
         "accent": (120, 255, 180),
         "header_bg": (34, 197, 94), "header_text": (255, 255, 255),
-        "header_label": "POT. DİP ALIM SİNYALİ",
+        "header_label": "ALIM SİNYALİ",
         "box_bg": (6, 60, 45),
     },
     "hedef": {
