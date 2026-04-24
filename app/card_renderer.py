@@ -421,6 +421,12 @@ def render_card(data: CardData) -> Image.Image:
     draw = ImageDraw.Draw(img)
 
     # ---- Fiyat kutuları ----
+    def _rel_pct(v: Optional[float]) -> Optional[float]:
+        """Giriş fiyatına göre relatif % (target/stop için)."""
+        if v is None or data.entry is None or data.entry == 0:
+            return None
+        return (v - data.entry) / data.entry * 100
+
     boxes = []
     if data.entry is not None:
         boxes.append({"label": "GİRİŞ", "value": _fmt_price(data.entry), "color": (255, 255, 255)})
@@ -431,11 +437,14 @@ def render_card(data: CardData) -> Image.Image:
         })
     if data.target is not None:
         boxes.append({"label": "HEDEF 1" if data.target2 else "HEDEF",
-                      "value": _fmt_price(data.target), "color": (140, 255, 180)})
+                      "value": _fmt_price(data.target), "color": (140, 255, 180),
+                      "extra_pct": _rel_pct(data.target)})
     if data.target2 is not None:
-        boxes.append({"label": "HEDEF 2", "value": _fmt_price(data.target2), "color": (140, 255, 180)})
+        boxes.append({"label": "HEDEF 2", "value": _fmt_price(data.target2),
+                      "color": (140, 255, 180), "extra_pct": _rel_pct(data.target2)})
     if data.stop is not None:
-        boxes.append({"label": "STOP", "value": _fmt_price(data.stop), "color": (255, 170, 160)})
+        boxes.append({"label": "STOP", "value": _fmt_price(data.stop),
+                      "color": (255, 170, 160), "extra_pct": _rel_pct(data.stop)})
     if data.exit_price is not None:
         boxes.append({"label": "ÇIKIŞ", "value": _fmt_price(data.exit_price), "color": (255, 255, 255)})
     if data.kar_pct is not None and not any(b["label"] == "K/Z" for b in boxes):
