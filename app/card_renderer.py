@@ -54,7 +54,7 @@ THEMES = {
         "bg_top": (10, 110, 85), "bg_bottom": (6, 60, 50),
         "accent": (80, 230, 170),
         "header_bg": (34, 197, 94), "header_text": (255, 255, 255),
-        "header_label": "HEDEF OK",
+        "header_label": "Hedef Gerçekleşti",
         "box_bg": (6, 55, 42),
     },
     "stop": {
@@ -492,6 +492,9 @@ def render_card(data: CardData) -> Image.Image:
         if risk > 0:
             rr_val = (data.target - data.entry) / risk
 
+    DEFAULT_FILL = (255, 255, 255, 230)
+    rendered: list = []  # list of (text, fill)
+
     l1_parts = []
     if data.price is not None:
         up = data.change_pct is not None and data.change_pct >= 0
@@ -503,24 +506,30 @@ def render_card(data: CardData) -> Image.Image:
     if rr_val is not None:
         l1_parts.append(f"R:R  {rr_val:.2f} (Risk Ödül Oranı)".replace(".", ","))
     if l1_parts:
-        lines.append("      ".join(l1_parts))
+        rendered.append(("      ".join(l1_parts), DEFAULT_FILL))
 
     # TP1 olayında: stop'un break-even'a çekildiğini bildir
     if data.event_type.upper() == "TP1" and data.entry is not None:
-        lines.append(f"Stop → Giriş seviyesine çekildi  ({_fmt_price(data.entry)} — Break-Even)")
+        rendered.append(
+            (f"Stop → Giriş seviyesine çekildi  ({_fmt_price(data.entry)} — Break-Even)",
+             DEFAULT_FILL))
 
-    l2_parts = []
     if data.basari_oran is not None:
         bo = f"Başarı: %{data.basari_oran:.1f}".replace(".", ",")
         if data.kazanc is not None and data.kayip is not None:
             bo += f"  ({data.kazanc}K / {data.kayip}L)"
-        l2_parts.append(bo)
-    if l2_parts:
-        lines.append("      ".join(l2_parts))
+        # Renk: <50 kırmızı, 50-70 turuncu, >=70 yeşil
+        if data.basari_oran >= 70:
+            bo_fill = (120, 255, 170, 240)
+        elif data.basari_oran >= 50:
+            bo_fill = (255, 180, 80, 240)
+        else:
+            bo_fill = (255, 110, 110, 240)
+        rendered.append((bo, bo_fill))
 
     y = info_y
-    for ln in lines:
-        draw.text((pad_x, y), ln, font=ib_font, fill=(255, 255, 255, 230))
+    for txt, fill in rendered:
+        draw.text((pad_x, y), txt, font=ib_font, fill=fill)
         y += 26
 
     # ---- Ayırıcı + uyarı (2 satır) ----
