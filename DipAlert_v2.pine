@@ -104,7 +104,7 @@ if tp1Yeni_v2
 // ─────────────────────────────────────────────────────────────
 // HEDEF 2 (TP2) → JSON
 // ─────────────────────────────────────────────────────────────
-if tp2Ulasti and pozisyonAcik and show_hedef
+if tp2Ulasti and show_hedef
     tp2Kar = ((tp2Fiyat - girisFiyat) / girisFiyat) * 100
     tp2Json = '{' +
         '"event":"TP2",' +
@@ -122,7 +122,7 @@ if tp2Ulasti and pozisyonAcik and show_hedef
 // ─────────────────────────────────────────────────────────────
 // STOP → JSON
 // ─────────────────────────────────────────────────────────────
-if stopYedi and pozisyonAcik
+if stopYedi
     stopKZ_v2 = ((stopFiyat - girisFiyat) / girisFiyat) * 100
     stopJson = '{' +
         '"event":"STOP",' +
@@ -139,7 +139,7 @@ if stopYedi and pozisyonAcik
 // ─────────────────────────────────────────────────────────────
 // TRAILING → JSON
 // ─────────────────────────────────────────────────────────────
-if trailingYedi and pozisyonAcik and not stopYedi and not tp2Ulasti and show_trailing
+if trailingYedi and not stopYedi and not tp2Ulasti and show_trailing
     trailKZ_v2 = ((trailingStop - girisFiyat) / girisFiyat) * 100
     trailJson = '{' +
         '"event":"TRAILING",' +
