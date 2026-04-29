@@ -44,11 +44,11 @@ THEMES = {
         "box_bg": (20, 40, 90),
     },
     "dip_al": {
-        "bg_top": (15, 120, 90), "bg_bottom": (8, 70, 55),
-        "accent": (120, 255, 180),
+        "bg_top": (30, 80, 180), "bg_bottom": (18, 45, 120),
+        "accent": (255, 210, 60),
         "header_bg": (34, 197, 94), "header_text": (255, 255, 255),
         "header_label": "ALIM SİNYALİ",
-        "box_bg": (6, 60, 45),
+        "box_bg": (20, 42, 95),
     },
     "hedef": {
         "bg_top": (10, 110, 85), "bg_bottom": (6, 60, 50),
