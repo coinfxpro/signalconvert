@@ -205,6 +205,7 @@ class CardData:
     basari_oran: Optional[float] = None
     kazanc: Optional[int] = None
     kayip: Optional[int] = None
+    signal_tag: Optional[str] = None  # "DIP" / "FISH" / "TRANSFORM" — sembol altı büyük rozet
 
 
 # ---------------------------------------------------------------------------
@@ -388,13 +389,35 @@ def render_card(data: CardData) -> Image.Image:
         draw.text((right_text_x, sym_y + 48), conf_txt,
                   font=info_font_s, fill=(255, 255, 255, 220))
 
+    # ---- Sinyal tipi rozeti (sembol altı) ----
+    tag_extra_y = 0
+    if data.signal_tag:
+        tag = data.signal_tag.strip().upper()
+        TAG_COLORS = {
+            "DIP":       ((34, 197, 94),  (255, 255, 255)),   # yeşil
+            "FISH":      ((59, 130, 246), (255, 255, 255)),   # mavi
+            "TRANSFORM": ((168, 85, 247), (255, 255, 255)),   # mor
+        }
+        bg_col, fg_col = TAG_COLORS.get(tag, ((100, 116, 139), (255, 255, 255)))
+        tag_font = _font(32, bold=True)
+        tw_tag = _text_w(draw, tag, tag_font)
+        bbox_tag = draw.textbbox((0, 0), tag, font=tag_font)
+        th_tag = bbox_tag[3] - bbox_tag[1]
+        px_t, py_t = 18, 8
+        tag_y = sym_y + 92
+        tag_rect = (pad_x, tag_y, pad_x + tw_tag + px_t * 2, tag_y + th_tag + py_t * 2)
+        _rounded_rect(draw, tag_rect, radius=10, fill=bg_col)
+        draw.text((pad_x + px_t, tag_y + py_t - 4), tag,
+                  font=tag_font, fill=fg_col)
+        tag_extra_y = (th_tag + py_t * 2) + 12
+
     # ---- 3 Kriter Sütunu ----
     has_criteria = any([
         data.gunluk_skor is not None, data.canli_skor is not None, data.giris_skor is not None,
         data.gunluk_kriterler, data.canli_kriterler, data.giris_kriterler,
     ])
     if has_criteria:
-        cb_y = sym_y + 110
+        cb_y = sym_y + 110 + tag_extra_y
         cb_h = 160
         total_w = CARD_W - pad_x * 2
         gap = 14
@@ -416,7 +439,7 @@ def render_card(data: CardData) -> Image.Image:
                                title, score_text, labels, flags, theme)
         after_y = cb_y + cb_h + 14
     else:
-        after_y = sym_y + 110
+        after_y = sym_y + 110 + tag_extra_y
 
     draw = ImageDraw.Draw(img)
 

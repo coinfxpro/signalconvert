@@ -83,4 +83,5 @@ def parse_payload(raw: str | Dict[str, Any]) -> CardData:
         basari_oran=_f(data.get("basari_oran") or data.get("win_rate")),
         kazanc=int(data["kazanc"]) if isinstance(data.get("kazanc"), (int, float)) else None,
         kayip=int(data["kayip"]) if isinstance(data.get("kayip"), (int, float)) else None,
+        signal_tag=(_s("signal_tag", "tag") or None),
     )

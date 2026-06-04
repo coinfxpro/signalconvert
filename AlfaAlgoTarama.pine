@@ -1127,6 +1127,7 @@ giris_krit = str.tostring(gi_dip) + "," + str.tostring(gi_ema) + "," + str.tostr
 sc_trigger = (dip_buy_signal and dip_al) or (fish_buy_signal and fish_al) or (TRSlongCondition and TRS_al)
 
 sc_subtitle = dip_buy_signal ? "Dip Alım Koşulları" : fish_buy_signal ? "Fish Alım Sinyali" : TRSlongCondition ? "Transform Alım" : "Sinyal"
+sc_tag = dip_buy_signal ? "DIP" : fish_buy_signal ? "FISH" : TRSlongCondition ? "TRANSFORM" : "SIGNAL"
 
 // === JSON payload ===
 if sc_trigger and use_signalconvert and str.length(syminfo.tickerid) > 1
@@ -1135,6 +1136,7 @@ if sc_trigger and use_signalconvert and str.length(syminfo.tickerid) > 1
          '"event":"DIP_AL"' +
          ',"symbol":"' + syminfo.ticker(syminfo.tickerid) + '"' +
          ',"subtitle":"' + sc_subtitle + '"' +
+         ',"signal_tag":"' + sc_tag + '"' +
          ',"price":' + str.tostring(close, "#.##") +
          ',"change_pct":' + str.tostring(sc_change_pct, "#.##") +
          ',"entry":' + str.tostring(sc_entry, "#.##") +
