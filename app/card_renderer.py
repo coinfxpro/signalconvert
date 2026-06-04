@@ -676,6 +676,118 @@ def _trend_color(positive: bool) -> tuple:
     return (120, 255, 180) if positive else (255, 140, 140)
 
 
+# Pine'dan gelebilecek emoji -> ikon eşleştirmesi
+# (icon_kind, color) -> _draw_icon ile çizilir
+EMOJI_ICON_MAP = {
+    "🔥": ("flame", (255, 130, 40)),
+    "✅": ("check", (80, 220, 120)),
+    "⚠️": ("warn", (250, 200, 40)),
+    "⚠": ("warn", (250, 200, 40)),
+    "❌": ("cross", (240, 90, 90)),
+    "💎": ("diamond", (90, 200, 250)),
+    "🚀": ("rocket", (80, 220, 120)),
+    "⭐": ("star", (255, 215, 70)),
+    "🟢": ("dot", (80, 220, 120)),
+    "🛑": ("dot", (240, 90, 90)),
+    "🟡": ("dot", (250, 200, 40)),
+    "📈": ("up", (80, 220, 120)),
+    "📊": ("bars", (90, 200, 250)),
+    "🎯": ("target", (250, 200, 40)),
+}
+
+
+def _draw_icon(img: Image.Image, xy, kind: str, color: tuple, size: int = 18) -> None:
+    """Küçük vektor ikon çizer (emoji yerine)."""
+    x, y = xy
+    s = size
+    od = ImageDraw.Draw(img, "RGBA")
+    if kind == "check":
+        od.line([(x + s*0.18, y + s*0.55), (x + s*0.42, y + s*0.78), (x + s*0.85, y + s*0.28)],
+                fill=color + (255,), width=max(2, s // 7))
+    elif kind == "cross":
+        w = max(2, s // 7)
+        od.line([(x + s*0.20, y + s*0.20), (x + s*0.80, y + s*0.80)], fill=color + (255,), width=w)
+        od.line([(x + s*0.80, y + s*0.20), (x + s*0.20, y + s*0.80)], fill=color + (255,), width=w)
+    elif kind == "warn":
+        od.polygon([(x + s*0.50, y + s*0.10), (x + s*0.92, y + s*0.88), (x + s*0.08, y + s*0.88)],
+                   fill=color + (255,))
+        od.line([(x + s*0.50, y + s*0.38), (x + s*0.50, y + s*0.62)],
+                fill=(30, 30, 30, 255), width=max(2, s // 8))
+        od.ellipse((x + s*0.42, y + s*0.70, x + s*0.58, y + s*0.82), fill=(30, 30, 30, 255))
+    elif kind == "flame":
+        od.polygon([(x + s*0.50, y + s*0.05), (x + s*0.85, y + s*0.45),
+                    (x + s*0.75, y + s*0.85), (x + s*0.25, y + s*0.85),
+                    (x + s*0.15, y + s*0.45)], fill=color + (255,))
+        od.polygon([(x + s*0.50, y + s*0.30), (x + s*0.68, y + s*0.55),
+                    (x + s*0.50, y + s*0.80), (x + s*0.32, y + s*0.55)],
+                   fill=(255, 220, 80, 255))
+    elif kind == "diamond":
+        od.polygon([(x + s*0.50, y + s*0.10), (x + s*0.90, y + s*0.50),
+                    (x + s*0.50, y + s*0.90), (x + s*0.10, y + s*0.50)],
+                   fill=color + (255,))
+    elif kind == "rocket":
+        od.polygon([(x + s*0.50, y + s*0.10), (x + s*0.75, y + s*0.65),
+                    (x + s*0.25, y + s*0.65)], fill=color + (255,))
+        od.polygon([(x + s*0.45, y + s*0.65), (x + s*0.55, y + s*0.65),
+                    (x + s*0.50, y + s*0.92)], fill=(255, 130, 40, 255))
+    elif kind == "star":
+        cx, cy, r = x + s*0.50, y + s*0.50, s * 0.45
+        import math
+        pts = []
+        for i in range(10):
+            angle = -math.pi / 2 + i * math.pi / 5
+            rad = r if i % 2 == 0 else r * 0.45
+            pts.append((cx + math.cos(angle) * rad, cy + math.sin(angle) * rad))
+        od.polygon(pts, fill=color + (255,))
+    elif kind == "dot":
+        od.ellipse((x + s*0.18, y + s*0.18, x + s*0.82, y + s*0.82), fill=color + (255,))
+    elif kind == "up":
+        od.polygon([(x + s*0.50, y + s*0.15), (x + s*0.90, y + s*0.85),
+                    (x + s*0.10, y + s*0.85)], fill=color + (255,))
+    elif kind == "bars":
+        w = s * 0.18
+        od.rectangle((x + s*0.10, y + s*0.55, x + s*0.10 + w, y + s*0.90), fill=color + (255,))
+        od.rectangle((x + s*0.41, y + s*0.35, x + s*0.41 + w, y + s*0.90), fill=color + (255,))
+        od.rectangle((x + s*0.72, y + s*0.15, x + s*0.72 + w, y + s*0.90), fill=color + (255,))
+    elif kind == "target":
+        od.ellipse((x + s*0.08, y + s*0.08, x + s*0.92, y + s*0.92), outline=color + (255,), width=max(2, s // 9))
+        od.ellipse((x + s*0.28, y + s*0.28, x + s*0.72, y + s*0.72), outline=color + (255,), width=max(2, s // 10))
+        od.ellipse((x + s*0.42, y + s*0.42, x + s*0.58, y + s*0.58), fill=color + (255,))
+
+
+def _draw_text_with_icons(img: Image.Image, xy, text: str, font, fill) -> int:
+    """Metni soldan sağa çizer, içindeki emojileri ikona çevirir. Toplam genişliği döndürür."""
+    draw = ImageDraw.Draw(img)
+    x, y = xy
+    cursor_x = x
+    bbox = draw.textbbox((0, 0), "Ag", font=font)
+    line_h = bbox[3] - bbox[1]
+    icon_size = int(line_h * 1.05)
+    i = 0
+    buf = ""
+    while i < len(text):
+        ch = text[i]
+        # 2-karakter emoji (örn "⚠️" = ⚠ + variation selector) için 2 char dene
+        two = text[i:i+2]
+        match = EMOJI_ICON_MAP.get(two) or EMOJI_ICON_MAP.get(ch)
+        if match:
+            if buf:
+                draw.text((cursor_x, y), buf, font=font, fill=fill)
+                cursor_x += _text_w(draw, buf, font)
+                buf = ""
+            kind, color = match
+            _draw_icon(img, (cursor_x, y + (line_h - icon_size) // 2 + 2), kind, color, icon_size)
+            cursor_x += icon_size + 4
+            i += 2 if two in EMOJI_ICON_MAP else 1
+        else:
+            buf += ch
+            i += 1
+    if buf:
+        draw.text((cursor_x, y), buf, font=font, fill=fill)
+        cursor_x += _text_w(draw, buf, font)
+    return cursor_x - x
+
+
 def _strip_emoji(s: Optional[str]) -> str:
     """Pine'dan gelen emoji'li metni temizler (kare karakter görünmesini engeller)."""
     if not s:
@@ -797,7 +909,9 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
     _draw_section_box(img, (pad_x, cur_y, W - pad_x, cur_y + sec_h), theme)
     draw = ImageDraw.Draw(img)
     title_font = _font(18, bold=True)
-    draw.text((pad_x + 16, cur_y + 12), "GÜNLÜK TEKNİK ÖZET",
+    _draw_icon(img, (pad_x + 16, cur_y + 14), "up", (120, 220, 140), 20)
+    draw = ImageDraw.Draw(img)
+    draw.text((pad_x + 44, cur_y + 12), "GÜNLÜK TEKNİK ÖZET",
               font=title_font, fill=(255, 210, 60))
 
     row_font = _font(16, bold=True)
@@ -829,7 +943,9 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
     sec_h = 220
     _draw_section_box(img, (pad_x, cur_y, W - pad_x, cur_y + sec_h), theme)
     draw = ImageDraw.Draw(img)
-    draw.text((pad_x + 16, cur_y + 12), "BIST GENEL GÖRÜNÜM",
+    _draw_icon(img, (pad_x + 16, cur_y + 14), "bars", (90, 200, 250), 20)
+    draw = ImageDraw.Draw(img)
+    draw.text((pad_x + 44, cur_y + 12), "BIST GENEL GÖRÜNÜM",
               font=title_font, fill=(255, 210, 60))
 
     bist_rows = []
@@ -848,13 +964,14 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
         su = f" ({data.sectors_up}/4)" if data.sectors_up is not None else ""
         bist_rows.append(("Sektör Durumu", f"{data.breadth_status}{su}"))
     if data.signal_strength:
-        sr = f" ({data.signal_reliability}/5)" if data.signal_reliability is not None else ""
+        sr = f" ⭐{data.signal_reliability}" if data.signal_reliability is not None else ""
         bist_rows.append(("Sinyal Kalitesi", f"{data.signal_strength}{sr}"))
 
     ry = cur_y + 44
     for label, value in bist_rows[:6]:
         draw.text((pad_x + 16, ry), f"├ {label}:", font=row_font, fill=(220, 230, 240))
-        draw.text((pad_x + 200, ry), value, font=row_font, fill=(255, 255, 255))
+        _draw_text_with_icons(img, (pad_x + 200, ry), value, row_font, (255, 255, 255))
+        draw = ImageDraw.Draw(img)
         ry += 26
     cur_y += sec_h + 14
 
@@ -862,7 +979,9 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
     sec_h = 240
     _draw_section_box(img, (pad_x, cur_y, W - pad_x, cur_y + sec_h), theme)
     draw = ImageDraw.Draw(img)
-    draw.text((pad_x + 16, cur_y + 12), "DİP ANALİZİ",
+    _draw_icon(img, (pad_x + 16, cur_y + 14), "target", (250, 200, 40), 20)
+    draw = ImageDraw.Draw(img)
+    draw.text((pad_x + 44, cur_y + 12), "DİP ANALİZİ",
               font=title_font, fill=(255, 210, 60))
 
     col_w = (W - pad_x * 2 - 30) // 2
@@ -879,9 +998,10 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
         draw.text((bx0, by), f"Fark: {data.price_diff_3month:.2f} TL".replace(".", ","),
                   font=row_font, fill=(220, 230, 240)); by += 22
     if data.distance_3month is not None:
-        ev = f" — {_strip_emoji(data.eval_3month)}" if data.eval_3month else ""
-        draw.text((bx0, by), f"Uzaklık: %{data.distance_3month:.2f}{ev}".replace(".", ","),
-                  font=row_font, fill=(255, 255, 255)); by += 22
+        base = f"Uzaklık: %{data.distance_3month:.2f}  ".replace(".", ",")
+        ev_full = f"{base}{data.eval_3month or ''}"
+        _draw_text_with_icons(img, (bx0, by), ev_full, row_font, (255, 255, 255))
+        draw = ImageDraw.Draw(img); by += 22
 
     # Yıllık
     bx1 = pad_x + 16 + col_w + 30
@@ -895,18 +1015,20 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
         draw.text((bx1, by), f"Fark: {data.price_diff_1year:.2f} TL".replace(".", ","),
                   font=row_font, fill=(220, 230, 240)); by += 22
     if data.distance_1year is not None:
-        ev = f" — {_strip_emoji(data.eval_1year)}" if data.eval_1year else ""
-        draw.text((bx1, by), f"Uzaklık: %{data.distance_1year:.2f}{ev}".replace(".", ","),
-                  font=row_font, fill=(255, 255, 255)); by += 22
+        base = f"Uzaklık: %{data.distance_1year:.2f}  ".replace(".", ",")
+        ev_full = f"{base}{data.eval_1year or ''}"
+        _draw_text_with_icons(img, (bx1, by), ev_full, row_font, (255, 255, 255))
+        draw = ImageDraw.Draw(img); by += 22
 
     # Genel değerlendirme
     if data.signal_strength_deep:
         deep_y = cur_y + sec_h - 50
         draw.line((pad_x + 16, deep_y - 8, W - pad_x - 16, deep_y - 8),
                   fill=(255, 255, 255, 40), width=1)
-        draw.text((pad_x + 16, deep_y),
-                  f"Değerlendirme: {_strip_emoji(data.signal_strength_deep)}",
-                  font=_font(18, bold=True), fill=(255, 210, 60))
+        _draw_text_with_icons(img, (pad_x + 16, deep_y),
+                              f"Değerlendirme: {data.signal_strength_deep}",
+                              _font(18, bold=True), (255, 210, 60))
+        draw = ImageDraw.Draw(img)
 
     cur_y += sec_h + 14
 
