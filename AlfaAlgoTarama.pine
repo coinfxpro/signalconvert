@@ -1,0 +1,1159 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © coinfxpro
+
+//@version=5
+indicator("BY PINE MULTI SCANNER", overlay= true)
+// EMA SCAN //
+ma_ma(type, src, len) =>
+    float result = 0
+    if type == 'SMA'  // Simple
+        result := ta.sma(src, len)
+        result
+    if type == 'EMA'  // Exponential
+        result := ta.ema(src, len)
+        result
+    if type == 'DEMA'  // Double Exponential
+        e = ta.ema(src, len)
+        result := 2 * e - ta.ema(e, len)
+        result
+
+    if type == 'HMA'  // Hull
+        result := ta.wma(2 * ta.wma(src, len / 2) - ta.wma(src, len), math.round(math.sqrt(len)))
+        result
+    result
+
+/// Sinyalleri seç//
+
+dip_al= input(true, title = 'DIP Tepe Sinyalleri',group = "////--Sinyalleri Seç--////")
+fish_al= input(true, title = 'Fish Sinyalleir',group = "////--Sinyalleri Seç--////")
+ma_buy= input(true, title = 'PriceMA Sinyalleri',group = "////--Sinyalleri Seç--////")
+boga_al= input(true, title = 'Uyumsuzluk',group = "////--Sinyalleri Seç--////")
+boga_uyumsuzluk_al= input(true, title = 'Gizli Uyumsuzluk ',group = "////--Sinyalleri Seç--////")
+vision_al= input(true, title = 'Vision Sinyalleri',group = "////--Sinyalleri Seç--////")
+ma_cross_al= input(true, title = 'MaCross Sinyalleri',group = "////--Sinyalleri Seç--////")
+TRS_al= input(true, title = 'Transform Sinyalleri',group = "////--Sinyalleri Seç--////")
+Bear_to_Bull_al= input(true, title = 'Bear-Bull TakeOver',group = "////--Sinyalleri Seç--////")
+
+
+/////MOOVING AGERAGE///
+telegramSend = input.bool(defval = false, title = "", group = "TELEGRAM", inline = "TG")
+grupid = input.string(defval = "Telegram CHAT ID", title = "", tooltip = "Telegram Channel, Group veya Profile ID", group = "TELEGRAM", inline = "TG")
+
+i_alert_mode = input.string(defval=alert.freq_once_per_bar, title='Alerts Mode', options=[alert.freq_all, alert.freq_once_per_bar, alert.freq_once_per_bar_close])
+
+
+show_ma1 = input(title='Show MA', defval=true,group='////----Moving Average Display----////', inline='1')
+ma_1_type = input.string(title='MA Type', defval='SMA', options=['SMA', 'EMA', 'DEMA','HMA'],group='////----Moving Average Display----////', inline='1')
+len_ma1 = input.int(50, minval=1, title="MA Length",group='////----Moving Average Display----////', inline='1')
+src_ma1 = close//input(close, title="MA1 Source",group='////----Moving Average Display----////', inline='1')
+out1= ma_ma(ma_1_type, src_ma1, len_ma1)
+ma_color1= input.color(color.orange, "MA Color",group='////----Moving Average Display----////', inline='4')
+ma_width= 3//input(3, "Moving Average Width",group='////----Moving Average Display----////', inline='5')
+sma_plot1= plot(show_ma1 ? out1: na, color=ma_color1, title="MA1", linewidth=ma_width)
+
+/////CROSS MOOVING AGERAGE///
+show_ma2 = input(title='Show CrossMA1', defval=true,group='////----Cross Moving Average Display----////', inline='5')
+ma_2_type = input.string(title='MA Type', defval='EMA', options=['SMA', 'EMA', 'DEMA','HMA'],group='////----Cross Moving Average Display----////', inline='5')
+len_ma2 = input.int(8, minval=1, title="MA Length",group='////----Cross Moving Average Display----////', inline='5')
+src_ma2 = close//input(close, title="MA1 Source",group='////----Moving Average Display----////', inline='1')
+out2= ma_ma(ma_2_type, src_ma2, len_ma2)
+ma_color2= input.color(color.green, "MA1 Color",group='////----Cross Moving Average Display----////', inline='5')
+ma_width2= 3//input(3, "Moving Average Width",group='////----Moving Average Display----////', inline='5')
+sma_plot2= plot(show_ma2 ? out2: na, color=ma_color2, title="CrossMA1", linewidth=ma_width2)
+
+show_ma3 = input(title='Show CrossMA2', defval=true,group='////----Cross Moving Average Display----////', inline='6')
+ma_3_type = input.string(title='MA Type', defval='EMA', options=['SMA', 'EMA', 'DEMA','HMA'],group='////----Cross Moving Average Display----////', inline='6')
+len_ma3 = input.int(13, minval=1, title="MA Length",group='////----Cross Moving Average Display----////', inline='6')
+src_ma3 = close//input(close, title="MA1 Source",group='////----Moving Average Display----////', inline='1')
+out3= ma_ma(ma_3_type, src_ma3, len_ma3)
+ma_color3= input.color(color.blue, "MA2 Color",group='////----Cross Moving Average Display----////', inline='6')
+ma_width3= 3//input(3, "Moving Average Width",group='////----Moving Average Display----////', inline='5')
+sma_plot3= plot(show_ma3 ? out3: na, color=ma_color3, title="CrossMA2", linewidth=ma_width3)
+
+ma_cross_long= ta.crossover(out2,out3) and ma_cross_al==true
+ma_cross_short= ta.crossunder(out2,out3) and ma_cross_al==true
+
+alertcondition(ma_cross_long, 'Bullish MaCrossBuy')
+alertcondition(ma_cross_short, 'Bearish MaCrossSell')
+
+///////////// Fisher Condition //////////
+
+// Fonksiyonlar
+fisher_transform(src, length) =>
+    // Fisher Transform hesaplaması
+    hi = ta.highest(src, length)
+    lo = ta.lowest(src, length)
+    raw_value = 0.0
+    raw_value := 0.66 * ((src - lo) / (hi - lo) - 0.5) + 0.67 * nz(raw_value[1])
+    bounded_value = math.min(math.max(raw_value, -0.999), 0.999)
+    fish = 0.0
+    fish := 0.5 * math.log((1 + bounded_value) / (1 - bounded_value)) + 0.5 * nz(fish[1])
+    fish
+
+fisher_transform_signal(src, length) =>
+    fish = fisher_transform(src, length)
+    fish[1]
+
+// Hesaplamalar
+//show_fish = input(title='Fish Sinyallerini Göster', defval=true,group='////--- Fish Signal Display---////')
+price = (high + low) / 2
+fish_length = input.int(10, minval=1, title="Fisher Length",group='////--- Fish Signal Display---////')
+ma_length = input.int(9, minval=1, title="MA Length",group='////--- Fish Signal Display---////')
+
+fish = fisher_transform(price, fish_length)
+fish_signal = fisher_transform_signal(price, fish_length)
+ma = ta.sma(close, ma_length)
+fish_ob= input.float(2, minval=0.1, title="OB",group='////--- Fish Signal Display---////')
+fish_os= input.float(-2, minval=-100, title="OS",group='////--- Fish Signal Display---////')
+
+// Kesişim sinyalleri
+fish_cross = ta.crossover(fish, fish_signal)
+ma_cross = ta.crossover(close, ma)
+fish_cross_sell = ta.crossunder(fish, fish_signal)
+ma_cross_sell = ta.crossunder(close, ma)
+
+// Alım sinyali
+fish_buy_signal = fish_cross and ma_cross and fish<fish_os and fish_al==true
+fish_sell_signal = fish_cross_sell and ma_cross_sell and fish>fish_ob and fish_al==true
+
+
+ma_buy_signal = ta.crossover(close,out1) and ma_buy==true
+ma_sell_signal = ta.crossunder(close,out1) and ma_buy==true
+
+
+//🚦//
+// Çizim
+plotchar(fish_al==true and  fish_buy_signal,title= 'Buy Signal',location= location.belowbar,offset=1, color = color.green, size=size.tiny,char='🔷')
+plotchar(fish_sell_signal and fish_al==true,title= 'Sell Signal',location= location.abovebar,offset=1, color = color.red, size=size.tiny,char='⛔️')
+//plotshape(fish_buy_signal, title = 'Buy Signal', location = location.belowbar, color = color.green, style = shape.triangleup, size = size.small)
+//plotshape(fish_sell_signal, title = 'Sell Signal', location = location.abovebar, color = color.red, style = shape.triangledown, size = size.small)
+
+/////// South Star //////
+//show_ss = input(title='DipTepe Sinyallerini Göster', defval=true,group='////--- G-Drive Signal Display---////')
+// Girdi değerleri
+RPD = input(30, title="RSI Period")
+SPD = input(30, title="Stochastic Period")
+PK = 3//input(3, title="K Period")
+S = 3//input(3, title="Smoothing Period")
+
+// Stochastic RSI hesaplaması
+rsiValueX = ta.rsi(close, RPD)
+stochRsi = (rsiValueX - ta.lowest(rsiValueX, SPD)) / (ta.highest(rsiValueX, SPD) - ta.lowest(rsiValueX, SPD)) * 100
+K = ta.sma(stochRsi, PK)
+D = ta.sma(stochRsi, S)
+
+// Koşulları Pine Script'e çevirme
+///ADX cond //
+adxlen = 14//input(14, title="ADX Smoothing")
+dilen = 14//input(14, title="DI Length")
+dirmov(len) =>
+    up = ta.change(high)
+    down = -ta.change(low)
+    plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+    minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+    truerange = ta.rma(ta.tr, len)
+    plus = fixnan(100 * ta.rma(plusDM, len) / truerange)
+    minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+    [plus, minus]
+adx(dilen, adxlen) =>
+    [plus, minus] = dirmov(dilen)
+    sum = plus + minus
+    adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+sig = adx(dilen, adxlen)
+
+/// ADX End ///
+RSIPeriod = 14
+volumePeriod = 10
+rsiCross = ta.crossover(ta.rsi(close, RSIPeriod), 30)
+sellrsiCross = ta.crossunder(ta.rsi(close, RSIPeriod), 70)
+volumeCondition = volume / ta.sma(volume, volumePeriod) > 1
+momentumCondition = ta.mom(close, volumePeriod) > -100
+volumeAboveAverage = volume > ta.sma(volume, volumePeriod)
+adxCondition = sig > 14
+
+// Fibonacci Levels
+fib_0 = 0.382//input.float(0.382, "Fib Level 0")
+fib_1 = 0.618//input.float(0.618, "Fib Level 1")
+
+// Calculate Fibonacci levels
+fib_range = ta.highest(high, 2) - ta.lowest(low, 2)
+
+fib_level_0 = ta.highest(high, 2) - (fib_range * fib_0)
+fib_level_1 = ta.highest(high, 2) - (fib_range * fib_1)
+
+// Sonuç koşulu
+condition = D < 40 and rsiCross and volumeCondition and momentumCondition and volumeAboveAverage and adxCondition and dip_al==true
+
+
+// Çıktı ve işaretleme
+if (condition) and dip_al==true
+    label.new(x = bar_index, y = na, text = 'Al', yloc = yloc.belowbar, color = color.green, style = label.style_label_up, textcolor = color.black)
+
+// Satış koşulu
+rsiOverbought = ta.rsi(close, RSIPeriod) > 70
+stochCrossDown = ta.crossover(D, K)
+sell_momentum= ta.mom(close,volumePeriod)>2
+volumeBelowAverage = volume < ta.sma(volume, volumePeriod)
+
+sellCondition = K> 80 and D>80 and sellrsiCross and sell_momentum and close < fib_level_0 and volumeCondition and dip_al==true
+//sellConditionX = request.security(syminfo.ticker,tfinput1,sellCondition)
+
+if (sellCondition) and dip_al==true
+    label.new(x = bar_index, y = na, text = 'Sat', yloc = yloc.abovebar, color = color.red, style = label.style_label_down, textcolor = color.black)
+
+
+dip_buy_signal = condition
+tepe_sell_signal = sellCondition
+
+
+// Fisher ve Signal çizgileri
+//plot(fish, color = color.blue, title = 'Fisher')
+//plot(fish_signal, color = color.red, title = 'Fisher Signal')
+//plot(ma, color = color.yellow, title = 'MA')
+alertcondition(fish_buy_signal,title= "Fisher Buy")
+alertcondition(fish_sell_signal, title="Fisher Sell")
+alertcondition(ma_buy_signal,title= "MaCross Buy")
+alertcondition(ma_sell_signal, title="MaCross Sell")
+alertcondition(dip_buy_signal,title= "Dip Alım Buy")
+alertcondition(tepe_sell_signal, title="Tepe Satım Sell")
+
+
+//////// Vision Osilator //////
+n1 = input(10, 'Channel length')
+n2 = input(21, 'Average length')
+reaction_wt = input.int(defval=1, title='Reaction in change of direction', minval=1)
+
+nsc = input.float(53, 'Levels About Buys', minval=0.0)
+nsv = input.float(-53, 'Levels About Sells', maxval=-0.0)
+
+Buy_sales = input(true, title='Only Smart Buy Reversal')
+Sell_sales = input(true, title='Only Smart Sell Reversal')
+
+Histogram = input(true, title='Show Histogarm')
+//Trendx = input(false, title='Show Trendx')
+barras = input(true, title='Divergence on chart(Bars)')
+divregbull = input(true, title='Regular Divergence Bullish')
+divregbear = input(true, title='Regular Divergence Bearish')
+divhidbull = input(true, title='Show Divergence Hidden Bullish')
+divhidbear = input(true, title='Show Divergence Hidden Bearish')
+Tags = input(true, title='Show Divergence Lable')
+amme = input(false, title='Activar media movil Extra para WT')
+
+White = #FDFEFE
+Black = #000000
+Bearish = #e91e62
+Bullish = #29f14ac7
+Strong_Bullish = #2962ff
+Bullish2 = #00bedc
+Blue1 = #00D4FF
+Blue2 = #009BBA
+orange = #FF8B00
+yellow = #FFFB00
+LEZ = #0066FF
+purp = #FF33CC
+
+// Colouring
+
+
+tf(_res, _exp, gaps_on) =>
+    gaps_on == 0 ? request.security(syminfo.tickerid, _res, _exp) : gaps_on == true ? request.security(syminfo.tickerid, _res, _exp, barmerge.gaps_on, barmerge.lookahead_off) : request.security(syminfo.tickerid, _res, _exp, barmerge.gaps_off, barmerge.lookahead_off)
+
+ha_htf = ''
+show_ha = input.bool(true, "Show HA Plot/ Market Bias", group="HA Market Bias")
+ha_len = input(7, 'Period', group="HA Market Bias")
+ha_len2 = input(10, 'Smoothing', group="HA Market Bias")
+
+// Calculations {
+o = ta.ema(open, ha_len)
+c = ta.ema(close, ha_len)
+h = ta.ema(high, ha_len)
+l = ta.ema(low, ha_len)
+
+haclose = tf(ha_htf, (o + h + l + c) / 4, 0)
+xhaopen = tf(ha_htf, (o + c) / 2, 0)
+haopen = na(xhaopen[1]) ? (o + c) / 2 : (xhaopen[1] + haclose[1]) / 2
+hahigh = math.max(h, math.max(haopen, haclose))
+halow = math.min(l, math.min(haopen, haclose))
+
+
+o2 = tf(ha_htf, ta.ema(haopen, ha_len2), 0)
+c2 = tf(ha_htf, ta.ema(haclose, ha_len2), 0)
+h2 = tf(ha_htf, ta.ema(hahigh, ha_len2), 0)
+l2 = tf(ha_htf, ta.ema(halow, ha_len2), 0)
+
+ha_avg = (h2 + l2) / 2
+// }
+    
+osc_len = 8
+
+osc_bias = 100 *(c2 - o2)
+osc_smooth = ta.ema(osc_bias, osc_len)
+
+sigcolor = 
+  (osc_bias > 0) and (osc_bias >= osc_smooth) ? color.new(Bullish, 35) : 
+  (osc_bias > 0) and (osc_bias < osc_smooth) ? color.new(Bullish2, 75) : 
+  (osc_bias < 0) and (osc_bias <= osc_smooth) ? color.new(Bearish, 35) : 
+  (osc_bias < 0) and (osc_bias > osc_smooth) ? color.new(Bearish, 75) :
+  na
+// }
+
+
+
+nsc1 = nsc
+nsc2 = nsc + 5
+nsc3 = nsc + 10
+nsc4 = nsc + 15
+nsc5 = nsc + 20
+nsc6 = nsc + 25
+nsc7 = nsc + 30
+nsc8 = nsc + 35
+nsv1 = nsv - 5
+nsv2 = nsv - 10
+nsv3 = nsv - 15
+nsv4 = nsv - 20
+nsv5 = nsv - 25
+nsv6 = nsv - 30
+nsv7 = nsv - 35
+nsv8 = nsv - 40
+
+
+ap = hlc3
+esa = ta.ema(ap, n1)
+d = ta.ema(math.abs(ap - esa), n1)
+ci = (ap - esa) / (0.015 * d)
+tci = ta.ema(ci, n2)
+
+wt1 = tci
+wt2 = ta.sma(wt1, 4)
+
+direction = 0
+direction := ta.rising(wt1, reaction_wt) ? 1 : ta.falling(wt1, reaction_wt) ? -1 : nz(direction[1])
+Change_of_direction = ta.change(direction, 1)
+pcol = direction > 0 ? Strong_Bullish : direction < 0 ? Bearish : na
+
+obLevel1 = input(60, 'Over Bought Level 1')
+obLevel2 = input(53, 'Over Bought Level 2')
+osLevel1 = input(-60, 'Over Sold Level 1')
+osLevel2 = input(-53, 'Over Sold Level 2')
+
+rsi = ta.rsi(close,14)
+color greengrad = color.from_gradient(rsi, 10, 90, #00ddff, #007d91)
+color redgrad = color.from_gradient(rsi, 10, 90, #8b002e, #e91e62)
+
+
+
+//ob1  = plot(obLevel1, color=#e91e6301)
+//os1 = plot(osLevel1, color=#00dbff01)
+//ob2 = plot(obLevel2, color=#e91e6301)
+//os2 = plot(osLevel2, color=#00dbff01)
+
+//p1 = plot(wt1, color=#00dbff01)
+//p2 = plot(wt2, color=#e91e6301)
+//plot(wt1 - wt2, color=wt2 - wt1 > 0 ? redgrad : greengrad, style=plot.style_columns)
+
+// fill(p1,p2,color = wt2 - wt1 > 0 ? redgrad: greengrad) // old
+
+//fill(p1,p2,color = sigcolor) // new
+
+
+//fill(ob1,ob2,color = #e91e6350)
+//fill(os1,os2,color = #00dbff50)
+
+midpoint = (nsc + nsv) / 2
+ploff = (nsc - midpoint) / 8
+
+BullSale = ta.crossunder(wt1, wt2) and wt1 >= nsc and Buy_sales == true
+BearSale = ta.crossunder(wt1, wt2) and Buy_sales == false
+
+Bullishh = ta.crossover(wt1, wt2) and wt1 <= nsv and Sell_sales == true
+Bearishh = ta.crossover(wt1, wt2) and Sell_sales == false
+
+//plot(BullSale ? wt2[1] + ploff : na, style=plot.style_circles, color=color.new(Bearish, 0), linewidth=3, title='BuysG')
+//plot(BearSale ? wt2[1] + ploff : na, style=plot.style_circles, color=color.new(Bearish, 0), linewidth=3, title='SellsG')
+
+//plot(Bullishh ? wt2[1] - ploff : na, style=plot.style_circles, color=color.new(Strong_Bullish, 0), linewidth=3, title='Buys On Sale')
+//plot(Bearishh ? wt2[1] - ploff : na, style=plot.style_circles, color=color.new(Strong_Bullish, 0), linewidth=3, title='Sells on Sale')
+
+//plot(Histogram ? wt1 - wt2 : na, style=plot.style_area, color=color.new(Blue2, 80), linewidth=1, title='Histograma')
+
+//barcolor(barras == true and Bullishh == true or barras == true and Bearishh == true ? Bullish2 : na)
+//barcolor(barras == true and BullSale == true or barras == true and BearSale == true ? Bearish : na)
+
+/////// Divergence ///////
+
+f_top_fractal(_src) =>
+    _src[4] < _src[2] and _src[3] < _src[2] and _src[2] > _src[1] and _src[2] > _src[0]
+f_bot_fractal(_src) =>
+    _src[4] > _src[2] and _src[3] > _src[2] and _src[2] < _src[1] and _src[2] < _src[0]
+f_fractalize(_src) =>
+    f_top_fractal(_src) ? 1 : f_bot_fractal(_src) ? -1 : 0
+
+fractal_top1 = f_fractalize(wt1) > 0 ? wt1[2] : na
+fractal_bot1 = f_fractalize(wt1) < 0 ? wt1[2] : na
+
+high_prev1 = ta.valuewhen(fractal_top1, wt1[2], 0)[2]
+high_price1 = ta.valuewhen(fractal_top1, high[2], 0)[2]
+low_prev1 = ta.valuewhen(fractal_bot1, wt1[2], 0)[2]
+low_price1 = ta.valuewhen(fractal_bot1, low[2], 0)[2]
+
+regular_bearish_div1 = fractal_top1 and high[2] > high_price1 and wt1[2] < high_prev1 and divregbear == true
+hidden_bearish_div1 = fractal_top1 and high[2] < high_price1 and wt1[2] > high_prev1 and divhidbear == true
+regular_bullish_div1 = fractal_bot1 and low[2] < low_price1 and wt1[2] > low_prev1 and divregbull == true
+hidden_bullish_div1 = fractal_bot1 and low[2] > low_price1 and wt1[2] < low_prev1 and divhidbull == true
+
+col1 = regular_bearish_div1 ? Bearish : hidden_bearish_div1 ? Bearish : na
+col2 = regular_bullish_div1 ? Strong_Bullish : hidden_bullish_div1 ? Strong_Bullish : na
+
+//plot(title='Divergence Bearish', series=fractal_top1 ? wt1[2] : na, color=col1, linewidth=2, transp=0)
+//plot(title='Divergence Bullish', series=fractal_bot1 ? wt1[2] : na, color=col2, linewidth=2, transp=0)
+
+//plotshape(regular_bearish_div1 and divregbear and Tags ? wt1[1] + ploff * 1 : na, title='Divergence Regular Bearish', text='Bear', location=location.absolute, style=shape.labeldown, size=size.tiny, color=color.new(Bearish, 0), textcolor=color.new(White, 0),force_overlay = true)
+//plotshape(hidden_bearish_div1 and divhidbear and Tags ? wt1[1] + ploff * 1 : na, title='Divergence Hidden Bearish', text='H Bear', location=location.absolute, style=shape.labeldown, size=size.tiny, color=color.new(Bearish, 0), textcolor=color.new(White, 0),force_overlay = true)
+
+//plotshape(regular_bullish_div1 and divregbull and Tags ? wt1[1] - ploff * 1 : na, title='Divergence Regular Bullish', text='Bull', location=location.absolute, style=shape.labelup, size=size.tiny, color=color.new(Strong_Bullish, 0), textcolor=color.new(White, 0),force_overlay = true)
+//plotshape(hidden_bullish_div1 and divhidbull and Tags ? wt1[1] - ploff * 1 : na, title='Divergence Hidden Bullish', text='H Bull', location=location.absolute, style=shape.labelup, size=size.tiny, color=color.new(Strong_Bullish, 0), textcolor=color.new(White, 0),force_overlay = true)
+
+
+/////// Unfazed Alerts  //////
+
+//alertcondition(BullSale, title='Smart Bullish Reversal')
+//alertcondition(BearSale, title='Smart Bearish Reversal')
+
+//alertcondition(Bullishh, title='Bullish Reversal')
+//alertcondition(Bearishh, title='Bearish Reversal')
+
+
+// Son 3 bar içinde bu koşulların oluşup oluşmadığını kontrol edin
+recent_bullsale = ta.barssince(BullSale) <= 2
+recent_bullishh = ta.barssince(Bullishh) <= 2
+
+Bull_to_Bear= ta.barssince(BullSale or Bullishh) <=2
+Bear_to_Bull= ta.barssince(BearSale or Bearishh) <=2
+
+alertcondition(Bull_to_Bear, title='Bull_to_Bear TakeOver')
+alertcondition(Bear_to_Bull, title='Bear_to_Bull TakeOver')
+
+
+Boga_Uyumsuzluk = ta.barssince(regular_bullish_div1 and divregbull and Tags ? wt1[1] - ploff * 1 : na) <=2 and boga_al==true
+Boga_Gizli_Uyumsuzluk= ta.barssince(hidden_bullish_div1 and divhidbull and Tags ? wt1[1] - ploff * 1 : na) <=2 and boga_uyumsuzluk_al==true
+Ayi_Uyumsuzluk= ta.barssince(regular_bearish_div1 and divregbear and Tags ? wt1[1] + ploff * 1 : na) <=2 and boga_al==true
+Ayi_Gizli_Uyumsuzluk= ta.barssince(hidden_bearish_div1 and divhidbear and Tags ? wt1[1] + ploff * 1 : na) <=2 and boga_uyumsuzluk_al==true
+
+alertcondition(Boga_Uyumsuzluk, title='Boğa Uyumsuzluk')
+alertcondition(Boga_Gizli_Uyumsuzluk, title='Boğa Gizli Uyumsuzluk')
+
+alertcondition(Ayi_Uyumsuzluk, title='Ayı Uyumsuzluk')
+alertcondition(Ayi_Gizli_Uyumsuzluk, title='Ayı Gizli Uyumsuzluk')
+
+Vision_Al = ta.barssince(Bullishh ? wt2[1] - ploff : na) <=2 and vision_al==true
+Vision_Sat = ta.barssince(BullSale ? wt2[1] + ploff : na) <=2 and vision_al==true
+
+alertcondition(Vision_Al, title='Vision AL')
+alertcondition(Vision_Sat, title='Vision SAT')
+
+Change_of_WT = ta.barssince(Change_of_direction) <=2
+alertcondition(Change_of_WT, title='Change In Direction WT')
+
+plotshape(boga_al==true and BullSale ? wt2[1] - ploff : na, title='Bull_to_Bear TakeOver', text='Bear', location=location.abovebar, style=shape.labeldown, size=size.tiny, color=color.new(Bearish, 0), textcolor=color.new(White, 0),force_overlay = true)
+plotshape(boga_al==true and Bullishh ? wt2[1] + ploff : na, title='Bear_to_Bull TakeOver', text='Bull', location=location.belowbar, style=shape.labelup, size=size.tiny, color=color.new(Bullish, 0), textcolor=color.new(White, 0),force_overlay = true)
+
+plotshape(boga_uyumsuzluk_al==true and hidden_bullish_div1 and divhidbull and Tags ? wt1[1] - ploff * 1 : na, title='Bull_to_Bear TakeOver', text='HD_Bear', location=location.abovebar, style=shape.labeldown, size=size.tiny, color=color.new(Bearish, 0), textcolor=color.new(White, 0),force_overlay = true)
+plotshape(boga_uyumsuzluk_al==true and hidden_bearish_div1 and divhidbear and Tags ? wt1[1] + ploff * 1 : na, title='Bear_to_Bull TakeOver', text='HD_Bull', location=location.belowbar, style=shape.labelup, size=size.tiny, color=color.new(Bullish, 0), textcolor=color.new(White, 0),force_overlay = true)
+
+/////// Extra Alerts //////
+
+//alertcondition(BullSale, title='Overbought Reversal')
+//alertcondition(BearSale, title='All Reversal')
+
+//alertcondition(Bullishh, title='Oversold Buys')
+//alertcondition(Bearishh, title='All Buys')
+
+//alertcondition(BullSale or Bullishh, title='Buys/Reversal Overbought/Oversold')
+//alertcondition(BearSale or Bearishh, title='All Reversal/Buys')
+
+//alertcondition(Change_of_direction, title='WT Direction Change')
+
+/////// TRANSFORM SIGNALS START HERE //////////
+
+STO = false//input(false, title = 'Show STOCHASTIC Line?')
+RSI = true//input(true, title = 'Show RSI Line?')
+CCI = true//input(true, title = 'Show CCI Line?')
+MFI = false//input(false, title = 'Show MFI Line?')
+//Average means: average value of all 4 inverse fisher trasformed indicators
+AVERAGE = false//input(false, title = 'Show AVERAGE Line?')
+
+ccilength = input(8, 'CCI Length')
+wmalength = input(13, title = 'Smoothing Length')
+v11 = 0.1 * (ta.cci(close, ccilength) / 4)
+v21 = ta.wma(v11, wmalength)
+INV1 = (math.exp(2 * v21) - 1) / (math.exp(2 * v21) + 1)
+rsilength = input(8, 'RSI Length')
+v12 = 0.1 * (ta.rsi(close, rsilength) - 50)
+v22 = ta.wma(v12, wmalength)
+INV2 = (math.exp(2 * v22) - 1) / (math.exp(2 * v22) + 1)
+stochlength = input(8, 'STOCH Length')
+v1 = 0.1 * (ta.stoch(close, high, low, stochlength) - 50)
+v2 = ta.wma(v1, wmalength)
+INVLine = (math.exp(2 * v2) - 1) / (math.exp(2 * v2) + 1)
+//MFI
+mfilength = input(8, 'MFI Length')
+source = hlc3
+up = math.sum(volume * (ta.change(source) <= 0 ? 0 : source), mfilength)
+lo = math.sum(volume * (ta.change(source) >= 0 ? 0 : source), mfilength)
+mfi = 100.0 - 100.0 / (1.0 + up / lo)
+v13 = 0.1 * (mfi - 50)
+v23 = ta.wma(v13, wmalength)
+INV3 = (math.exp(2 * v23) - 1) / (math.exp(2 * v23) + 1)
+AVINV = (INV1 + INV2 + INVLine + INV3) / 4
+
+//plot(AVERAGE and bool(AVINV) ? AVINV : na, color = color.new(color.purple, 0), linewidth = 3, title = 'AVERAGE')
+//plot(STO and bool(INVLine) ? INVLine : na, color = color.new(color.blue, 0), linewidth = 1, title = 'STOCH')
+//plot(CCI and bool(INV1) ? INV1 : na, color = color.new(color.red, 0), linewidth = 3, title = 'CCIv2')
+//plot(RSI and bool(INV2) ? INV2 : na, color = color.new(color.black, 0), linewidth = 2, title = 'RSI')
+//plot(MFI and bool(INV3) ? INV3 : na, color = color.new(color.purple, 0), linewidth = 2, title = 'MFI')
+hline(0.5, color = color.red)
+hline(-0.5, color = color.green)
+
+// Trend belirleme
+fastMA = ta.ema(close, 5)
+slowMA = ta.ema(close, 13)
+trend = fastMA > slowMA ? 1 : fastMA < slowMA ? -1 : 0
+
+// Sinyal arası minimum bar sayısı
+minBarsBetwenSignals = 3
+var lastSignalBar = 0
+var lastSignalType = 0 // 1 for long, -1 for short
+
+// Momentum ve Hacim Hesaplamaları
+roc = ta.roc(close, 3) // 3 bara düşürdük
+volMA = ta.sma(volume, 10) // 10 bara düşürdük
+isVolHigh = volume > volMA * 0.8 // Hacim koşulunu yumuşattık
+
+// Eğim Hesaplamaları
+cci_slope = INV1 - INV1[2] // 2 bar öncesi ile karşılaştırma
+rsi_slope = INV2 - INV2[2]
+
+// CCI RSI kesişim koşulları
+TRSlongCondition = INV1 < -0.5 and INV2 < -0.5 and ta.crossover(INV1, INV2) and (cci_slope > -0.1 or rsi_slope > -0.1) and (trend == 1 or roc > -0.2) and isVolHigh // Seviyeler aynı ta.crossover(INV1,INV2) and           // Kesişim (cci_slope > -0.1 or rsi_slope > -0.1) and  // En az biri yukarı eğilimli (trend == 1 or roc > -0.2) and        // Trend yukarı veya momentum çok negatif değil isVolHigh                             // Hacim yeterli
+
+TRSshortCondition = INV1 > 0.5 and INV2 > 0.5 and ta.crossunder(INV1, INV2) and (cci_slope < 0.1 or rsi_slope < 0.1) and (trend == -1 or roc < 0.2) and isVolHigh // Seviyeler aynı ta.crossunder(INV1,INV2) and        // Kesişim (cci_slope < 0.1 or rsi_slope < 0.1) and  // En az biri aşağı eğilimli (trend == -1 or roc < 0.2) and      // Trend aşağı veya momentum çok pozitif değil isVolHigh                           // Hacim yeterli
+
+// Sinyal durumunu güncelle
+if TRSlongCondition and TRS_al==true and bar_index - lastSignalBar > minBarsBetwenSignals
+    lastSignalBar := bar_index
+    lastSignalType := 1
+    lastSignalType
+if TRSshortCondition and bar_index - lastSignalBar > minBarsBetwenSignals
+    lastSignalBar := bar_index
+    lastSignalType := -1
+    lastSignalType
+
+// Plot signals
+plotshape(TRS_al==true and  TRSlongCondition, title = 'Long Signal', text = 'LONG', style = shape.triangleup, location = location.belowbar, color = color.green, size = size.small, force_overlay = true)
+plotshape(TRS_al==true and  TRSshortCondition, title = 'Short Signal', text = 'SHORT', style = shape.triangledown, location = location.abovebar, color = color.red, size = size.small, force_overlay = true)
+
+// CCI ve RSI kesişim çizgileri
+//plot(INV1, color = color.red, linewidth = 2, title = 'CCI Line')
+//plot(INV2, color = color.black, linewidth = 2, title = 'RSI Line')
+
+// Alert messages
+alertcondition(TRS_al==true and  TRSlongCondition, title = 'TRS Buy', message = 'LONG Signal - CCI/RSI Crossover with Trend!')
+alertcondition(TRS_al==true and  TRSshortCondition, title = 'TRS Sell', message = 'SHORT Signal - CCI/RSI Crossover with Trend!')
+
+
+
+/////// TRANSFORM SIGNALS END HERE ////////////////
+
+////////////////// Auto Trend Line Start Here ///////////////////
+
+//// Trend line and BreakOut Setup /////////
+//import HoanGhetti/SimpleTrendlines/5 as tl
+import coinfxpro/SimpleTrendlines/1
+
+input_len       = input.int(defval = 50, title = 'TrendLine Pivot Length', minval = 1)
+input_pivotType = 'Normal'//input.string(defval = 'Normal', title = 'Pivot Type', options = ['Normal', 'Fast'], tooltip = 'Normal: Uses Pine\'s built-in pivot system.\n\nFast: Uses a custom pivot system that tracks every reversal.')
+input_repaint   = false//input.bool(defval = true, title = 'Repainting', tooltip = 'If disabled, it will wait for bar confirmation to avoid printing false alerts.')
+input_targets   = false//input.bool(defval = false, title = 'Target Levels')
+input_bearC     = color.red//input.color(defval = color.red, title = 'Bear Breakout', group = 'Styling')
+input_bullC     = color.green//input.color(defval = color.green, title = 'Bull Breakout', group = 'Styling')
+input_extend    = extend.none//input.string(defval = extend.none, title = 'Extend', options = [extend.none, extend.right, extend.left, extend.both], group = 'Styling')
+input_style     = line.style_dotted//input.string(defval = line.style_dotted, title = 'Trendline Style', options = [line.style_dotted, line.style_dashed, line.style_solid], group = 'Styling')
+input_tstyle    = line.style_dashed//input.string(defval = line.style_dashed, title = 'Target Style', options = [line.style_dotted, line.style_dashed, line.style_solid], group = 'Styling')
+input_override  = false//input.bool(defval = false, title = 'Override Source', group = 'Override', tooltip = 'Overriding the source will allow the script to create trendlines on any specified source.')
+input_useSrc    = true//input.bool(defval = true, title = 'Use Source for Cross Detection', group = 'Override', tooltip = 'Instead of checking if the close value crossed trendline, check for the specified source.')
+input_source    = close//input.source(defval = low, title = 'Source', group = 'Override')
+
+plx = fixnan(ta.pivotlow(input_override ? input_source : low, input_pivotType == 'Normal' ? input_len : 1, input_len))
+phx = fixnan(ta.pivothigh(input_override ? input_source : high, input_pivotType == 'Normal' ? input_len : 1, input_len))
+
+pivot(float pType) =>
+    pivot = pType == plx ? plx : phx
+    xAxis = ta.valuewhen(ta.change(pivot), bar_index, 0) - ta.valuewhen(ta.change(pivot), bar_index, 1)
+    prevPivot = ta.valuewhen(ta.change(pivot), pivot, 1)
+    pivotCond = ta.change(pivot) and (pType == plx ? pivot > prevPivot : pivot < prevPivot)
+    pData = SimpleTrendlines.new(x_axis = xAxis, offset = input_len, strictMode = true, strictType = pType == plx ? 0 : 1)
+    pData.drawLine(pivotCond, prevPivot, pivot, input_override ? input_source : na)
+    pData
+
+breakout(SimpleTrendlines.Trendline this, float pType) =>
+    var bool hasCrossed = false
+    if ta.change(this.lines.startline.get_y1())
+        hasCrossed := false
+    this.drawTrendline(not hasCrossed)
+    confirmation = not hasCrossed and (input_repaint ? not hasCrossed : barstate.isconfirmed)
+    if (pType == plx ? (input_override and input_useSrc ? input_source : close) < this.lines.trendline.get_y2() : (input_override and input_useSrc ? input_source : close) > this.lines.trendline.get_y2()) and confirmation
+        hasCrossed := true
+        this.lines.startline.set_xy2(this.lines.trendline.get_x2(), this.lines.trendline.get_y2())
+        this.lines.trendline.set_xy2(na, na)
+        this.lines.startline.copy()
+    hasCrossed
+
+plData = pivot(plx)
+phData = pivot(phx)
+
+style(SimpleTrendlines.Trendline this, color col) =>
+    this.lines.startline.set_color(col), this.lines.trendline.set_color(col)
+    this.lines.startline.set_width(2), this.lines.trendline.set_width(2)
+    this.lines.trendline.set_style(input_style), this.lines.trendline.set_extend(input_extend)
+style(plData, input_bearC), style(phData, input_bullC)
+
+cu = breakout(plData, plx)
+co = breakout(phData, phx)
+plotshape(ta.change(cu) and cu ? plData.lines.startline.get_y2() : na, title = 'Bearish Breakout', style = shape.labeldown, color = input_bearC, textcolor = color.white, location = location.absolute, text = 'Br')
+plotshape(ta.change(co) and co ? phData.lines.startline.get_y2() : na, title = 'Bullish Breakout', style = shape.labelup, color = input_bullC, textcolor = color.white, location = location.absolute, text = 'Br')
+
+recent_bull_breakout = ta.barssince(ta.change(co) and co) <= 3
+recent_bear_breakout = ta.barssince(ta.change(cu) and cu) <= 3
+
+
+
+alertcondition(recent_bear_breakout, 'Bearish Breakout')
+alertcondition(recent_bull_breakout, 'Bullish Breakout')
+//plotchar( ta.change(co) and co ? phData.lines.startline.get_y2() : na,title= 'CrossBreakout Buy Signal',location= location.belowbar,offset=1, color = color.green, size=size.tiny,char='🔷')
+//plotchar( ta.change(cu) and cu ? plData.lines.startline.get_y2() : na,title= 'CrossBreakout Sell Signal',location= location.abovebar,offset=1, color = color.red, size=size.tiny,char='⛔️')
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///                                             XU100 Seans Filtresi Modülü                                            ///
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// =============== SEANS FİLTRESİ AYARLARI ===============
+use_session_filter = input.bool(true, "XU100 Seans Filtresi Kullan", group="Seans Filtresi")
+xu100_symbol = input.string("BIST:XU100", "XU100 Sembolü", group="Seans Filtresi")
+session_tf = input.string("1", "Takip Periyodu", options=["1", "5"], group="Seans Filtresi")
+sensitivity = input.float(2.0, "Anomali Hassasiyeti", minval=0.5, maxval=5.0, step=0.5, group="Seans Filtresi")
+show_session_table = input.bool(true, "Seans Durumu Tablosu Göster", group="Seans Filtresi")
+
+// =============== XU100 VERİLERİNİ ÇEK ===============
+// XU100 endeksinin anlık verilerini çek
+[xu100_close, xu100_open, xu100_high, xu100_low, xu100_volume] = request.security(xu100_symbol, session_tf, [close, open, high, low, volume])
+
+// Önceki günün kapanış fiyatı
+xu100_prev_close = request.security(xu100_symbol, "1D", close[1])
+
+// =============== SEANS KONTROLÜ ===============
+// Türkiye saati kontrolü (UTC+3)
+turkey_time = time + 3 * 60 * 60 * 1000
+is_session_open = hour(turkey_time) >= 10 and hour(turkey_time) < 21 and dayofweek != dayofweek.saturday and dayofweek != dayofweek.sunday
+
+// Seans açılışı tespit et
+session_start = is_session_open and not is_session_open[1]
+
+// =============== PIYASA ANALİZİ ===============
+// Günlük değişim hesapla
+daily_change_pct = xu100_prev_close > 0 ? (xu100_close - xu100_prev_close) / xu100_prev_close * 100 : 0
+
+// Açılış gapı
+opening_gap = xu100_prev_close > 0 ? (xu100_open - xu100_prev_close) / xu100_prev_close * 100 : 0
+
+// Anlık momentum hesaplama
+xu100_roc_5 = ta.roc(xu100_close, 5)  // 5 periyot ROC
+xu100_roc_15 = ta.roc(xu100_close, 15) // 15 periyot ROC
+xu100_sma_20 = ta.sma(xu100_close, 20)
+xu100_above_sma = xu100_close > xu100_sma_20
+
+// Volatilite hesaplama (son 20 periyot)
+xu100_volatility = ta.stdev(ta.roc(xu100_close, 1), 20)
+avg_volatility = ta.sma(xu100_volatility, 50)
+high_volatility = xu100_volatility > avg_volatility * sensitivity
+
+// Hacim analizi
+xu100_vol_sma = ta.sma(xu100_volume, 20)
+high_volume = xu100_volume > xu100_vol_sma * 1.5
+
+// =============== ANOMALI TESPİTİ ===============
+// Ani düşüş tespit et
+sharp_decline = xu100_roc_5 < -1.5 and xu100_roc_15 < -2.0
+moderate_decline = xu100_roc_5 < -0.8 and xu100_roc_15 < -1.2
+
+// Güçlü satış baskısı
+strong_selling = sharp_decline and high_volume and high_volatility
+moderate_selling = moderate_decline and (high_volume or high_volatility)
+
+// Pozitif momentum
+positive_momentum = xu100_roc_5 > 0.3 and xu100_roc_15 > 0 and xu100_above_sma
+neutral_momentum = xu100_roc_5 > -0.5 and xu100_roc_5 < 0.5 and not high_volatility
+
+// =============== PIYASA DURUMU BELİRLE ===============
+var string market_status = "Analiz Ediliyor"
+var color status_color = color.yellow
+
+if is_session_open
+    if strong_selling
+        market_status := "GÜÇLÜ SATIŞ!"
+        status_color := color.red
+    else if moderate_selling
+        market_status := "Satış Baskısı"
+        status_color := color.orange
+    else if positive_momentum
+        market_status := "Pozitif Trend"
+        status_color := color.green
+    else if neutral_momentum
+        market_status := "Normal Seyir"
+        status_color := color.blue
+    else
+        market_status := "Kararsız Piyasa"
+        status_color := color.yellow
+else
+    market_status := "Seans Kapalı"
+    status_color := color.gray
+
+// =============== SİNYAL FİLTRESİ ===============
+// Sinyallerin aktif olup olmayacağını belirle
+signals_active = true
+
+if use_session_filter and is_session_open
+    signals_active := not strong_selling and not moderate_selling
+else if use_session_filter and not is_session_open
+    signals_active := false
+
+// Alarm durumu
+var bool alarm_sent = false
+if strong_selling and not alarm_sent
+    alarm_sent := true
+    alert("XU100 UYARI: Güçlü satış baskısı tespit edildi!", alert.freq_once_per_bar)
+
+if not strong_selling
+    alarm_sent := false
+
+
+
+// =============== GELİŞTİRİLMİŞ UYARI SİSTEMİ ===============
+// Çoklu uyarı sistemi
+alert_strong_selling = strong_selling and not strong_selling[1]
+alert_positive_turn = positive_momentum and not positive_momentum[1] and strong_selling[1]
+
+alertcondition(alert_strong_selling, title='XU100 Güçlü Satış Uyarısı', 
+               message='XU100 endeksinde güçlü satış baskısı! Alım sinyalleri devre dışı.')
+               
+alertcondition(alert_positive_turn, title='XU100 Toparlanma Uyarısı', 
+               message='XU100 endeksinde toparlanma başladı. Sinyaller tekrar aktif.')
+
+// =============== SINYAL KOŞULLARINI GÜNCELLE ===============
+// Mevcut sinyal koşullarınıza signals_active filtresini ekleyin:
+
+// Örnek kullanım (mevcut kodunuzdaki sinyal koşullarını şu şekilde güncelleyin):
+// Orijinal sinyal koşullarınız:
+//al_kosulu = z < under_high and z > under_low and k< rsi_os and srsi_long and cur_cond and cond_gold_rate
+
+// Seans filtreli yeni hali:
+//al_kosulu = z < under_high and z > under_low and k< rsi_os and srsi_long and cur_cond and cond_gold_rate and signals_active
+
+
+// Bu kodda sizin orijinal kodunuza eklemeler yapıyorum
+// Mevcut değişkenlerinizin altına eklenecek yeni bölümler:
+
+// =============== 2. VIX BENZERİ KORKU ENDEKSİ ===============
+// XU100 için örtük volatilite hesabı
+xu100_atr = request.security(xu100_symbol, session_tf, ta.atr(14))
+xu100_atr_ma = request.security(xu100_symbol, session_tf, ta.sma(xu100_atr, 20))
+fear_index = xu100_atr_ma > 0 ? xu100_atr / xu100_atr_ma : 1
+extreme_fear = fear_index > 2
+high_fear = fear_index > 1.5
+normal_fear = fear_index <= 1.5 and fear_index >= 0.8
+low_fear = fear_index < 0.8
+
+// Fear index durumu
+var string fear_status = "Normal"
+var color fear_color = color.green
+if extreme_fear
+    fear_status := "EXTREME!"
+    fear_color := color.red
+else if high_fear
+    fear_status := "Yüksek"
+    fear_color := color.orange
+else if normal_fear
+    fear_status := "Normal"
+    fear_color := color.blue
+else
+    fear_status := "Düşük"
+    fear_color := color.green
+
+// =============== 3. GÜN İÇİ MOMENTUM PATERNİ ===============
+// Seans açılışından itibaren momentum takibi
+bars_since_open = ta.barssince(session_start)
+intraday_momentum = bars_since_open > 0 and xu100_open > 0 ? 
+     (xu100_close - xu100_open) / xu100_open * 100 : 0
+
+// Açılış rallisi veya satışı tespiti
+opening_rally = intraday_momentum > 1 and bars_since_open < 30
+opening_dump = intraday_momentum < -1 and bars_since_open < 30
+sideways_open = not opening_rally and not opening_dump and bars_since_open < 30
+
+// Gün içi trend
+var string intraday_trend = "Yatay"
+var color trend_color = color.gray
+if intraday_momentum > 0.5
+    intraday_trend := "Yükseliş"
+    trend_color := color.green
+else if intraday_momentum < -0.5
+    intraday_trend := "Düşüş"
+    trend_color := color.red
+else
+    intraday_trend := "Yatay"
+    trend_color := color.gray
+
+// =============== 4. AKILLI GAP ANALİZİ ===============
+// Gap tipi belirleme
+gap_type = opening_gap > 1.5 ? "Breakaway" : 
+           opening_gap > 0.5 ? "Common" :
+           opening_gap < -1.5 ? "Exhaustion" : 
+           opening_gap < -0.5 ? "Common" : "No Gap"
+
+// Gap rengi
+gap_color = opening_gap > 0.5 ? color.green : 
+             opening_gap < -0.5 ? color.red : color.gray
+
+// Gap kapanma takibi
+gap_filled = xu100_prev_close > 0 and 
+     ((opening_gap > 0 and xu100_low <= xu100_prev_close) or 
+     (opening_gap < 0 and xu100_high >= xu100_prev_close))
+
+gap_fill_status = gap_filled ? "Kapandı" : "Açık"
+gap_fill_color = gap_filled ? color.blue : color.orange
+
+// =============== 5. MARKET BREADTH (PİYASA GENİŞLİĞİ) ===============
+// Yükselen/düşen sektör oranı
+[xbank_close, xbank_open] = request.security("BIST:XBANK", session_tf, [close, open])
+[xusin_close, xusin_open] = request.security("BIST:XUSIN", session_tf, [close, open])
+[xutek_close, xutek_open] = request.security("BIST:XUTEK", session_tf, [close, open])
+[xgida_close, xgida_open] = request.security("BIST:XGIDA", session_tf, [close, open])
+
+banking_up = xbank_close > xbank_open
+industrial_up = xusin_close > xusin_open
+tech_up = xutek_close > xutek_open
+food_up = xgida_close > xgida_open
+
+sectors_up = (banking_up ? 1 : 0) + (industrial_up ? 1 : 0) + 
+             (tech_up ? 1 : 0) + (food_up ? 1 : 0)
+total_sectors = 4
+
+market_breadth = (sectors_up / total_sectors) * 100
+breadth_status = market_breadth >= 75 ? "Çok Güçlü" :
+                 market_breadth >= 50 ? "Güçlü" :
+                 market_breadth >= 25 ? "Zayıf" : "Çok Zayıf"
+                 
+breadth_color = market_breadth >= 75 ? color.green :
+                 market_breadth >= 50 ? color.lime :
+                 market_breadth >= 25 ? color.orange : color.red
+
+xbank_daily_change_pct = xbank_close[1] > 0 ? (xbank_close - xbank_close[1]) / xbank_close[1] * 100 : 0
+xusin_daily_change_pct = xusin_close[1] > 0 ? (xusin_close - xusin_close[1]) / xusin_close[1] * 100 : 0
+xutek_daily_change_pct = xutek_close[1] > 0 ? (xutek_close - xutek_close[1]) / xutek_close[1] * 100 : 0
+xgida_daily_change_pct = xgida_close[1] > 0 ? (xgida_close - xgida_close[1]) / xgida_close[1] * 100 : 0
+
+// =============== 6. ADAPTİF HASSASİYET ===============
+// Volatiliteye göre hassasiyet ayarı
+adaptive_sensitivity = xu100_volatility > avg_volatility * 2 ? 
+     math.max(sensitivity * 0.7, 1) : 
+     xu100_volatility < avg_volatility * 0.5 ? 
+     math.min(sensitivity * 1.3, 3) : sensitivity
+
+sensitivity_status = adaptive_sensitivity < sensitivity ? "Azaltıldı" :
+                     adaptive_sensitivity > sensitivity ? "Artırıldı" : "Normal"
+sensitivity_color = adaptive_sensitivity < sensitivity ? color.orange :
+                   adaptive_sensitivity > sensitivity ? color.red : color.blue
+
+// =============== 7. SİNYAL GÜVENİLİRLİK SKORU ===============
+// Her sinyal için güvenilirlik hesapla
+signal_reliability = 0.0
+
+// Piyasa durumu pozitifse +1
+signal_reliability += positive_momentum ? 1 : 0
+
+// Volatilite normalse +1  
+signal_reliability += not high_volatility ? 1 : 0
+
+// Hacim destekliyorsa +1
+signal_reliability += high_volume and positive_momentum ? 1 : 0
+
+// Fear Index normalse +1
+signal_reliability += not high_fear and not extreme_fear ? 1 : 0
+
+// Market breadth güçlüyse +1
+signal_reliability += market_breadth >= 50 ? 1 : 0
+
+// Toplam skor (0-5 arası)
+signal_strength = signal_reliability >= 4 ? "ÇOK GÜÇLÜ" : 
+                 signal_reliability >= 3 ? "GÜÇLÜ" : 
+                 signal_reliability >= 2 ? "ORTA" : 
+                 signal_reliability >= 1 ? "ZAYIF" : "ÇOK ZAYIF"
+
+strength_color = signal_reliability >= 4 ? color.green : 
+                 signal_reliability >= 3 ? color.lime : 
+                 signal_reliability >= 2 ? color.yellow : 
+                 signal_reliability >= 1 ? color.orange : color.red
+
+
+
+// Telegram mesajına ek bilgiler
+market_analysis_text = "\\n\\n📊 *BIST Genel Görünüm*" +
+                      "\\n├ Durum: " + market_status +
+                      "\\n├ Fear Index: " + fear_status + " (" + str.tostring(fear_index, "#.##") + ")" +
+                      "\\n├ Gün İçi Trend: " + intraday_trend + " (%" + str.tostring(intraday_momentum, "#.##") + ")" +
+                      "\\n├ Gap: " + gap_type + " - " + gap_fill_status +
+                      "\\n├ Sektör Durum: " + breadth_status + " (" + str.tostring(sectors_up) + "/4)" +
+                      "\\n└ Sinyal Kalitesi: " + signal_strength + " ⭐" + str.tostring(signal_reliability, "#")
+
+// ====== YENİ EKLEME: DİP HESAPLAMALARI ======
+// Son 3 aylık (yaklaşık 63 işlem günü) en düşük değer
+low_3month = request.security(syminfo.tickerid, "1D", ta.lowest(low, 63))
+// Yıllık (yaklaşık 252 işlem günü) en düşük değer  
+low_1year = request.security(syminfo.tickerid, "1D", ta.lowest(low, 252))
+
+// Dibe uzaklık yüzdeleri
+distance_3month = ((close - low_3month) / low_3month) * 100
+distance_1year = ((close - low_1year) / low_1year) * 100
+
+// Fiyat farkları (TL olarak)
+price_diff_3month = close - low_3month
+price_diff_1year = close - low_1year
+
+// Dip değerlendirme fonksiyonu
+getDipEvaluation(distance) =>
+    if distance <= 5
+        "🔥 Çok Yakın"
+    else if distance <= 10
+        "✅ Yakın"
+    else if distance <= 20
+        "⚠️ Orta"
+    else
+        "❌ Uzak"
+
+// Dip değerlendirmeleri
+eval_3month = getDipEvaluation(distance_3month)
+eval_1year = getDipEvaluation(distance_1year)
+
+// Dip analiz metni
+dip_analysis_text = "\\n\\n📊 *Dip Analizi*" +
+     "\\n┌─ *3 Aylık Analiz*" +
+     "\\n├ Dip Değeri: " + str.tostring(low_3month, "#.##") + " TL" +
+     "\\n├ Mevcut Fiyat: " + str.tostring(close, "#.##") + " TL" +
+     "\\n├ Fark: " + str.tostring(price_diff_3month, "#.##") + " TL" +
+     "\\n├ Uzaklık: %" + str.tostring(distance_3month, "#.##") + " " + eval_3month +
+     "\\n│" +
+     "\\n├─ *Yıllık Analiz*" +
+     "\\n├ Dip Değeri: " + str.tostring(low_1year, "#.##") + " TL" +
+     "\\n├ Mevcut Fiyat: " + str.tostring(close, "#.##") + " TL" +
+     "\\n├ Fark: " + str.tostring(price_diff_1year, "#.##") + " TL" +
+     "\\n└ Uzaklık: %" + str.tostring(distance_1year, "#.##") + " " + eval_1year
+
+// Sinyal değerlendirme skoru (0-100)
+signal_score = 50  // Başlangıç skoru
+
+// Dip uzaklığına göre skor ayarlama
+if distance_3month <= 5
+    signal_score := signal_score + 25
+else if distance_3month <= 10
+    signal_score := signal_score + 15
+else if distance_3month <= 20
+    signal_score := signal_score + 5
+
+if distance_1year <= 10
+    signal_score := signal_score + 25
+else if distance_1year <= 20
+    signal_score := signal_score + 15
+else if distance_1year <= 30
+    signal_score := signal_score + 5
+
+// Sinyal gücü değerlendirmesi
+signal_strength_deep = signal_score >= 90 ? "💎 Mükemmel" : 
+                 signal_score >= 75 ? "🚀 Çok İyi" :
+                 signal_score >= 60 ? "✅ İyi" :
+                 signal_score >= 40 ? "⚠️ Orta" : "❌ Zayıf"
+
+
+alSinyal = (dip_buy_signal and dip_al==true) or (fish_buy_signal and fish_al==true) or (ma_buy_signal and ma_buy==true) or (Boga_Uyumsuzluk and boga_al==true) or 
+     (Boga_Gizli_Uyumsuzluk and boga_uyumsuzluk_al==true) or (Vision_Al and vision_al==true) or (ma_cross_long and ma_cross_al==true) or (TRSlongCondition and TRS_al==true)
+satSinyal = sellCondition
+sinyal = alSinyal ? close : satSinyal ? close * -1 : 0
+
+dipText = "[Borsa Yardımcısı]  Potansiyel Dip Sinyali. EMA377 Seviyesi test edilebilir. Diğer kontrolleri yapın."
+tepeText = "[Borsa Yardımcısı] Hisse EMA377 seviyesini yukarı kırdı. Dönüş potansiyeli için grafiği kontrol edin."
+
+fish_buy_signal_text = "Potansiyel Fish Alım Sinyali. Diğer kontrolleri yapın."
+//fish_sell_signal_text = "[Borsa Yardımcısı]  Potansiyel Fish Satım Sinyali. Diğer kontrolleri yapın."
+ma_buy_signal_text = "Potansiyel MA Cross Alım Sinyali. Diğer kontrolleri yapın."
+//ma_sell_signal_text = "[Borsa Yardımcısı]  Potansiyel MA Cross Sinyali. Diğer kontrolleri yapın."
+dip_buy_signal_text = "Potansiyel Dip Alım Sinyali. Diğer kontrolleri yapın."
+//tepe_sell_signal_text = "[Borsa Yardımcısı]  Potansiyel Tepe Satım Sinyali. Diğer kontrolleri yapın."
+
+boga_uyumsuzluk_text = "Potansiyel Boğa Uyumsuzluk Sinyali. Diğer kontrolleri yapın."
+gizli_boga_uyumsuzluk_text = "Potansiyel Gizli Boğa Uyumsuzluk Sinyali. Diğer kontrolleri yapın."
+vision_al_text = "Potansiyel Vision Alım Sinyali. Diğer kontrolleri yapın."
+bull_breakout_text = "Potansiyel Alım Bull BreakOut Sinyali. Diğer kontrolleri yapın."
+
+ma_cross_buy_signal_text = "Alım Yönlü Hareketli ortalama kesişmesi. Diğer kontrolleri yapın."
+ma_cross_sell_signal_text = "Satım Yönlü Hareketli Ortalama kesişmesi. Diğer kontrolleri yapın."
+
+//TRSlongCondition
+TRSlongCondition_text = "Potansiyel Transform Al Sinyali. Diğer kontrolleri yapın."
+//TRSshortCondition_text = "Potansiyel Transform Sinyali. Diğer kontrolleri yapın."
+
+//symbol= input.symbol(close)
+
+
+
+periodText = "PERİYOT : "
+fiyatText = "FİYAT : "
+kontrol = "Grafiği Kontrol edin! "
+gunluk_degisim= "Günlük değişim: "
+//alarmTetikle(symbol)=>
+//    durum = request.security(syminfo.tickerid,timeframe.period,condition, ignore_invalid_symbol = true)
+//    mesaj = fish_buy_signal==1?fish_buy_signal_text : ma_buy_signal==1 ? ma_buy_signal_text : dip_buy_signal==1 ? dip_buy_signal_text : Boga_Uyumsuzluk==1 ? boga_uyumsuzluk_text :  ""
+//    timeinnow= "{{timenow}}"
+//    if durum != 0 and str.length(syminfo.tickerid) > 1 // herhangi bir sinyal var ise yani
+//        alarmMesajiJSON = "<strong>"+ syminfo.tickerid+"</strong>" +" => "+mesaj +"\\n" + periodText + timeframe.period +" DK"+ "\\n" +fiyatText + str.tostring(math.round(math.abs(durum),2)) + "\\n" +kontrol
+//      
+//        reply = ',"reply_markup":{"inline_keyboard":[[{"text":"📉 Tradingview","url":"https://www.tradingview.com/chart/?symbol='+syminfo.tickerid+'"}]]}'
+//        if telegramSend
+//           alert(message='{"chat_id":"'+grupid+'","text":"'+alarmMesajiJSON+'","parse_mode":"html"'+reply+'}',freq =  i_alert_mode)
+//        else
+//            alert(message = syminfo.tickerid + " hissesinde sinyal : " + mesaj)
+onceki_gun=request.security(syminfo.tickerid,"1D",(close[1]))
+gunluk=request.security(syminfo.tickerid,timeframe.period,(close-onceki_gun)/onceki_gun*100)
+sma_500= request.security(syminfo.tickerid,"1D", ta.sma(close,500))
+sma_200= request.security(syminfo.tickerid,"1D", ta.sma(close,200))
+sma_50 = request.security(syminfo.tickerid,"1D", ta.sma(close,50))
+rsi_value= request.security(syminfo.tickerid,timeframe.period, ta.rsi(close,14))
+
+ema_10= request.security(syminfo.tickerid,timeframe.period, ta.ema(close,10))
+ema_21 = request.security(syminfo.tickerid,"1D", ta.ema(close,21))
+
+
+durum = request.security(syminfo.tickerid,timeframe.period,alSinyal, ignore_invalid_symbol = true)
+mesaj = fish_buy_signal==1 ? fish_buy_signal_text : ma_cross_long==1 ? ma_cross_buy_signal_text : ma_buy_signal==1 ? ma_buy_signal_text : dip_buy_signal==1 ? dip_buy_signal_text : Boga_Uyumsuzluk==1 ? boga_uyumsuzluk_text : Boga_Gizli_Uyumsuzluk==1 ? gizli_boga_uyumsuzluk_text :
+     Vision_Al==1 ? vision_al_text : TRSlongCondition==1 ? TRSlongCondition_text : recent_bull_breakout==1 ? bull_breakout_text :  ""
+timeinnow= "{{timenow}}"
+if durum != 0 and str.length(syminfo.tickerid) > 1// herhangi bir sinyal var ise yani
+    alarmMesajiJSON = "<strong>"+ syminfo.ticker(syminfo.tickerid)+"</strong>" +" => "+mesaj +"\\n" + periodText + str.tostring(timeframe.period) +" DK"+ "\\n" +fiyatText + str.tostring(close) + "\\n" +kontrol + "\\n"
+         + "\\n" +gunluk_degisim + "%" + str.tostring(gunluk, "#.##") + " " + (gunluk>0 ? " 🟢" : gunluk<0 ? " 🛑" : "") 
+         + "\\n" + "Günlük 500SMA: " + str.tostring(sma_500,"#.##") + " " + (close > sma_500 ? " 🟢" : close < sma_500 ? " 🛑" : "") 
+         + "\\n" + "Günlük 200SMA: " + str.tostring(sma_200,"#.##") + " " + (close > sma_200 ? " 🟢" : close < sma_200 ? " 🛑" : "") 
+         + "\\n" + "Günlük 50SMA: " + str.tostring(sma_50,"#.##") + " " + (close > sma_50 ? " 🟢" : close < sma_50 ? " 🛑" : "")
+         + "\\n" + "Günlük Ema21: " + str.tostring(ema_21,"#.##") + " " + (close > ema_21 ? " 🟢" : close < ema_21 ? " 🛑" : "")
+         + "\\n" + "Fiyat EMA21 Günlük seviyenin " + "" + (close > ema_21 ? "Üstünde" : close < ema_21 ? "Altında" : "")
+         + "\\n" + "RSI: " + str.tostring(rsi_value,"#.##") + " " + (rsi_value < 30 ? " 🟢" : rsi_value > 70 ? " 🛑" : " 🟡")
+         + "\\n" + market_analysis_text 
+         + "\\n" +dip_analysis_text + "\\n\\n" +  // YENİ EKLENEN DİP ANALİZİ
+         "🎯 *Dip Analizi Değerlendirmesi*: " + signal_strength_deep  // YENİ EKLENEN GENEL DEĞERLENDİRME
+    reply = ',"reply_markup":{"inline_keyboard":[[{"text":"📉 Tradingview","url":"https://www.tradingview.com/chart/?symbol='+syminfo.tickerid+'"}]]}'
+    if telegramSend
+        alert(message='{"chat_id":"'+grupid+'","text":"'+alarmMesajiJSON+'","parse_mode":"html"'+reply+'}',freq =  i_alert_mode)
+    else
+        alert(message = syminfo.ticker(syminfo.tickerid) + " hissesinde sinyal : " + mesaj)
+
+
+
+
+
+//alarmTetikle(fish_buy_signal)
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///                              SIGNALCONVERT WEBHOOK (Trade Kartı - Resim)                                            ///
+///   Dip + Transform + Fish sinyallerini SignalConvert'e JSON gönderir; orada görsel karta dönüşür.                    ///
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+use_signalconvert = input.bool(true, "SignalConvert Webhook Aktif", group="SIGNALCONVERT")
+
+// === ATR tabanlı entry/target/stop ===
+atr_14_daily = request.security(syminfo.tickerid, "1D", ta.atr(14))
+sc_entry  = close
+sc_target = close + atr_14_daily * 1.5
+sc_target2 = close + atr_14_daily * 3.0
+sc_stop   = close - atr_14_daily * 1.0
+sc_rr     = atr_14_daily > 0 ? 1.5 : na  // TP1/Stop = 1.5/1.0
+
+// === 7'li skor sistemleri (Pine'daki mevcut göstergelerden türetilmiş) ===
+// GÜNLÜK DİP skoru: günlük zaman diliminden kriterler
+// Sıra (renderer'da): MA, Dip, Mum, Hcm, Dön, Hft, Ich
+g_ma   = close > sma_50 ? 1 : 0                         // 50SMA üstünde
+g_dip  = distance_3month <= 20 ? 1 : 0                  // 3 aylık dibe yakın
+g_mum  = close > onceki_gun ? 1 : 0                     // gün içi pozitif
+g_hcm  = high_volume ? 1 : 0                            // hacim yüksek
+g_don  = rsi_value < 50 ? 1 : 0                         // dönüş bölgesi (RSI<50)
+g_hft  = close > sma_200 ? 1 : 0                        // haftalık trend (200SMA üstünde proxy)
+g_ich  = close > ema_21 ? 1 : 0                         // ichimoku/ema proxy
+gunluk_skor_v = g_ma + g_dip + g_mum + g_hcm + g_don + g_hft + g_ich
+gunluk_krit = str.tostring(g_ma) + "," + str.tostring(g_dip) + "," + str.tostring(g_mum) + "," + str.tostring(g_hcm) + "," + str.tostring(g_don) + "," + str.tostring(g_hft) + "," + str.tostring(g_ich)
+
+// CANLI DİP skoru: mevcut periyot (15m vs)
+c_ma   = close > out1 ? 1 : 0                           // MA50 üstünde
+c_dip  = distance_3month <= 25 ? 1 : 0                  // dip yakınlığı (canlı)
+c_mum  = close > open ? 1 : 0                           // mevcut mum yeşil
+c_hcm  = volume > ta.sma(volume, 10) ? 1 : 0            // canlı hacim
+c_don  = ta.rsi(close, 14) < 55 ? 1 : 0                 // dönüş bölgesi
+c_hft  = positive_momentum ? 1 : 0                      // pozitif momentum
+c_ich  = market_breadth >= 50 ? 1 : 0                   // breadth güçlü
+canli_skor_v = c_ma + c_dip + c_mum + c_hcm + c_don + c_hft + c_ich
+canli_krit = str.tostring(c_ma) + "," + str.tostring(c_dip) + "," + str.tostring(c_mum) + "," + str.tostring(c_hcm) + "," + str.tostring(c_don) + "," + str.tostring(c_hft) + "," + str.tostring(c_ich)
+
+// 15dk GİRİŞ skoru: giriş tetik kriterleri
+// Sıra (renderer'da): Dip, EMA, RSI, MACD, Hcm, VWAP, HL
+[macdLine, macdSignal, _macdHist] = ta.macd(close, 12, 26, 9)
+vwap_val = ta.vwap(hlc3)
+gi_dip   = (dip_buy_signal or fish_buy_signal or TRSlongCondition) ? 1 : 0
+gi_ema   = close > ema_10 ? 1 : 0
+gi_rsi   = ta.rsi(close, 14) > 30 and ta.rsi(close, 14) < 70 ? 1 : 0
+gi_macd  = macdLine > macdSignal ? 1 : 0
+gi_hcm   = volume > ta.sma(volume, 10) * 0.8 ? 1 : 0
+gi_vwap  = close > vwap_val ? 1 : 0
+gi_hl    = low > low[1] ? 1 : 0                         // higher low
+giris_skor_v = gi_dip + gi_ema + gi_rsi + gi_macd + gi_hcm + gi_vwap + gi_hl
+giris_krit = str.tostring(gi_dip) + "," + str.tostring(gi_ema) + "," + str.tostring(gi_rsi) + "," + str.tostring(gi_macd) + "," + str.tostring(gi_hcm) + "," + str.tostring(gi_vwap) + "," + str.tostring(gi_hl)
+
+// === Sinyal tipi & subtitle ===
+sc_trigger = (dip_buy_signal and dip_al) or (fish_buy_signal and fish_al) or (TRSlongCondition and TRS_al)
+
+sc_subtitle = dip_buy_signal ? "Dip Alım Koşulları" : fish_buy_signal ? "Fish Alım Sinyali" : TRSlongCondition ? "Transform Alım" : "Sinyal"
+
+// === JSON payload ===
+if sc_trigger and use_signalconvert and str.length(syminfo.tickerid) > 1
+    sc_change_pct = gunluk
+    sc_json = '{' +
+         '"event":"DIP_AL"' +
+         ',"symbol":"' + syminfo.ticker(syminfo.tickerid) + '"' +
+         ',"subtitle":"' + sc_subtitle + '"' +
+         ',"price":' + str.tostring(close, "#.##") +
+         ',"change_pct":' + str.tostring(sc_change_pct, "#.##") +
+         ',"entry":' + str.tostring(sc_entry, "#.##") +
+         ',"target":' + str.tostring(sc_target, "#.##") +
+         ',"target2":' + str.tostring(sc_target2, "#.##") +
+         ',"stop":' + str.tostring(sc_stop, "#.##") +
+         ',"rr":' + str.tostring(sc_rr, "#.##") +
+         ',"gunluk_skor":' + str.tostring(gunluk_skor_v) +
+         ',"gunluk_etiket":"Bugün"' +
+         ',"gunluk_kriterler":"' + gunluk_krit + '"' +
+         ',"canli_skor":' + str.tostring(canli_skor_v) +
+         ',"canli_kriterler":"' + canli_krit + '"' +
+         ',"giris_skor":' + str.tostring(giris_skor_v) +
+         ',"giris_kriterler":"' + giris_krit + '"' +
+         ',"atr_daily":' + str.tostring(atr_14_daily, "#.##") +
+         ',"basari_oran":50.0' +
+         ',"kazanc":10' +
+         ',"kayip":10' +
+         '}'
+    alert(sc_json, freq = i_alert_mode)
+
+
