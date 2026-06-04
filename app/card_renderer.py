@@ -647,7 +647,7 @@ def _status_badge_text(data: CardData) -> str:
 # AlgoTarama kart şablonu (BIST Genel + Dip Analizi + Teknik Özet)
 # ---------------------------------------------------------------------------
 ALGO_CARD_W = 900
-ALGO_CARD_H = 1200
+ALGO_CARD_H = 1050
 
 ALGO_THEME = {
     "bg_top": (20, 35, 75),
@@ -674,6 +674,20 @@ def _dot(draw: ImageDraw.ImageDraw, xy, color, r: int = 6) -> None:
 
 def _trend_color(positive: bool) -> tuple:
     return (120, 255, 180) if positive else (255, 140, 140)
+
+
+def _strip_emoji(s: Optional[str]) -> str:
+    """Pine'dan gelen emoji'li metni temizler (kare karakter görünmesini engeller)."""
+    if not s:
+        return ""
+    out = []
+    for ch in s:
+        cp = ord(ch)
+        # Emoji blokları + variation selectors + supplementary
+        if (0x2600 <= cp <= 0x27BF) or (0x1F300 <= cp <= 0x1FAFF) or cp in (0xFE0F, 0x200D):
+            continue
+        out.append(ch)
+    return "".join(out).strip()
 
 
 def _draw_section_box(img: Image.Image, xy, theme: dict, alpha: int = 200) -> None:
@@ -783,7 +797,7 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
     _draw_section_box(img, (pad_x, cur_y, W - pad_x, cur_y + sec_h), theme)
     draw = ImageDraw.Draw(img)
     title_font = _font(18, bold=True)
-    draw.text((pad_x + 16, cur_y + 12), "📈 GÜNLÜK TEKNİK ÖZET",
+    draw.text((pad_x + 16, cur_y + 12), "GÜNLÜK TEKNİK ÖZET",
               font=title_font, fill=(255, 210, 60))
 
     row_font = _font(16, bold=True)
@@ -815,7 +829,7 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
     sec_h = 220
     _draw_section_box(img, (pad_x, cur_y, W - pad_x, cur_y + sec_h), theme)
     draw = ImageDraw.Draw(img)
-    draw.text((pad_x + 16, cur_y + 12), "📊 BIST GENEL GÖRÜNÜM",
+    draw.text((pad_x + 16, cur_y + 12), "BIST GENEL GÖRÜNÜM",
               font=title_font, fill=(255, 210, 60))
 
     bist_rows = []
@@ -834,7 +848,7 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
         su = f" ({data.sectors_up}/4)" if data.sectors_up is not None else ""
         bist_rows.append(("Sektör Durumu", f"{data.breadth_status}{su}"))
     if data.signal_strength:
-        sr = f" ⭐{data.signal_reliability}" if data.signal_reliability is not None else ""
+        sr = f" ({data.signal_reliability}/5)" if data.signal_reliability is not None else ""
         bist_rows.append(("Sinyal Kalitesi", f"{data.signal_strength}{sr}"))
 
     ry = cur_y + 44
@@ -848,7 +862,7 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
     sec_h = 240
     _draw_section_box(img, (pad_x, cur_y, W - pad_x, cur_y + sec_h), theme)
     draw = ImageDraw.Draw(img)
-    draw.text((pad_x + 16, cur_y + 12), "🎯 DİP ANALİZİ",
+    draw.text((pad_x + 16, cur_y + 12), "DİP ANALİZİ",
               font=title_font, fill=(255, 210, 60))
 
     col_w = (W - pad_x * 2 - 30) // 2
@@ -865,7 +879,7 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
         draw.text((bx0, by), f"Fark: {data.price_diff_3month:.2f} TL".replace(".", ","),
                   font=row_font, fill=(220, 230, 240)); by += 22
     if data.distance_3month is not None:
-        ev = f" {data.eval_3month}" if data.eval_3month else ""
+        ev = f" — {_strip_emoji(data.eval_3month)}" if data.eval_3month else ""
         draw.text((bx0, by), f"Uzaklık: %{data.distance_3month:.2f}{ev}".replace(".", ","),
                   font=row_font, fill=(255, 255, 255)); by += 22
 
@@ -881,7 +895,7 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
         draw.text((bx1, by), f"Fark: {data.price_diff_1year:.2f} TL".replace(".", ","),
                   font=row_font, fill=(220, 230, 240)); by += 22
     if data.distance_1year is not None:
-        ev = f" {data.eval_1year}" if data.eval_1year else ""
+        ev = f" — {_strip_emoji(data.eval_1year)}" if data.eval_1year else ""
         draw.text((bx1, by), f"Uzaklık: %{data.distance_1year:.2f}{ev}".replace(".", ","),
                   font=row_font, fill=(255, 255, 255)); by += 22
 
@@ -891,7 +905,7 @@ def render_algo_tarama_card(data: CardData) -> Image.Image:
         draw.line((pad_x + 16, deep_y - 8, W - pad_x - 16, deep_y - 8),
                   fill=(255, 255, 255, 40), width=1)
         draw.text((pad_x + 16, deep_y),
-                  f"Değerlendirme: {data.signal_strength_deep}",
+                  f"Değerlendirme: {_strip_emoji(data.signal_strength_deep)}",
                   font=_font(18, bold=True), fill=(255, 210, 60))
 
     cur_y += sec_h + 14
