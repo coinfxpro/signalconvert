@@ -1077,84 +1077,50 @@ if durum != 0 and str.length(syminfo.tickerid) > 1// herhangi bir sinyal var ise
 
 use_signalconvert = input.bool(true, "SignalConvert Webhook Aktif", group="SIGNALCONVERT")
 
-// === ATR tabanlı entry/target/stop ===
-atr_14_daily = request.security(syminfo.tickerid, "1D", ta.atr(14))
-sc_entry  = close
-sc_target = close + atr_14_daily * 1.5
-sc_target2 = close + atr_14_daily * 3.0
-sc_stop   = close - atr_14_daily * 1.0
-sc_rr     = atr_14_daily > 0 ? 1.5 : na  // TP1/Stop = 1.5/1.0
-
-// === 7'li skor sistemleri (Pine'daki mevcut göstergelerden türetilmiş) ===
-// GÜNLÜK DİP skoru: günlük zaman diliminden kriterler
-// Sıra (renderer'da): MA, Dip, Mum, Hcm, Dön, Hft, Ich
-g_ma   = close > sma_50 ? 1 : 0                         // 50SMA üstünde
-g_dip  = distance_3month <= 20 ? 1 : 0                  // 3 aylık dibe yakın
-g_mum  = close > onceki_gun ? 1 : 0                     // gün içi pozitif
-g_hcm  = high_volume ? 1 : 0                            // hacim yüksek
-g_don  = rsi_value < 50 ? 1 : 0                         // dönüş bölgesi (RSI<50)
-g_hft  = close > sma_200 ? 1 : 0                        // haftalık trend (200SMA üstünde proxy)
-g_ich  = close > ema_21 ? 1 : 0                         // ichimoku/ema proxy
-gunluk_skor_v = g_ma + g_dip + g_mum + g_hcm + g_don + g_hft + g_ich
-gunluk_krit = str.tostring(g_ma) + "," + str.tostring(g_dip) + "," + str.tostring(g_mum) + "," + str.tostring(g_hcm) + "," + str.tostring(g_don) + "," + str.tostring(g_hft) + "," + str.tostring(g_ich)
-
-// CANLI DİP skoru: mevcut periyot (15m vs)
-c_ma   = close > out1 ? 1 : 0                           // MA50 üstünde
-c_dip  = distance_3month <= 25 ? 1 : 0                  // dip yakınlığı (canlı)
-c_mum  = close > open ? 1 : 0                           // mevcut mum yeşil
-c_hcm  = volume > ta.sma(volume, 10) ? 1 : 0            // canlı hacim
-c_don  = ta.rsi(close, 14) < 55 ? 1 : 0                 // dönüş bölgesi
-c_hft  = positive_momentum ? 1 : 0                      // pozitif momentum
-c_ich  = market_breadth >= 50 ? 1 : 0                   // breadth güçlü
-canli_skor_v = c_ma + c_dip + c_mum + c_hcm + c_don + c_hft + c_ich
-canli_krit = str.tostring(c_ma) + "," + str.tostring(c_dip) + "," + str.tostring(c_mum) + "," + str.tostring(c_hcm) + "," + str.tostring(c_don) + "," + str.tostring(c_hft) + "," + str.tostring(c_ich)
-
-// 15dk GİRİŞ skoru: giriş tetik kriterleri
-// Sıra (renderer'da): Dip, EMA, RSI, MACD, Hcm, VWAP, HL
-[macdLine, macdSignal, _macdHist] = ta.macd(close, 12, 26, 9)
-vwap_val = ta.vwap(hlc3)
-gi_dip   = (dip_buy_signal or fish_buy_signal or TRSlongCondition) ? 1 : 0
-gi_ema   = close > ema_10 ? 1 : 0
-gi_rsi   = ta.rsi(close, 14) > 30 and ta.rsi(close, 14) < 70 ? 1 : 0
-gi_macd  = macdLine > macdSignal ? 1 : 0
-gi_hcm   = volume > ta.sma(volume, 10) * 0.8 ? 1 : 0
-gi_vwap  = close > vwap_val ? 1 : 0
-gi_hl    = low > low[1] ? 1 : 0                         // higher low
-giris_skor_v = gi_dip + gi_ema + gi_rsi + gi_macd + gi_hcm + gi_vwap + gi_hl
-giris_krit = str.tostring(gi_dip) + "," + str.tostring(gi_ema) + "," + str.tostring(gi_rsi) + "," + str.tostring(gi_macd) + "," + str.tostring(gi_hcm) + "," + str.tostring(gi_vwap) + "," + str.tostring(gi_hl)
-
-// === Sinyal tipi & subtitle ===
+// === Sinyal tetikleyici ===
 sc_trigger = (dip_buy_signal and dip_al) or (fish_buy_signal and fish_al) or (TRSlongCondition and TRS_al)
 
-sc_subtitle = dip_buy_signal ? "Dip Alım Koşulları" : fish_buy_signal ? "Fish Alım Sinyali" : TRSlongCondition ? "Transform Alım" : "Sinyal"
+// === Sinyal tipi (subtitle + tag) ===
+sc_subtitle = dip_buy_signal ? "Potansiyel Dip Alım Sinyali" : fish_buy_signal ? "Potansiyel Fish Alım Sinyali" : TRSlongCondition ? "Potansiyel Transform Alım Sinyali" : "Sinyal"
 sc_tag = dip_buy_signal ? "DIP" : fish_buy_signal ? "FISH" : TRSlongCondition ? "TRANSFORM" : "SIGNAL"
 
-// === JSON payload ===
+// === JSON payload — Pine'daki zaten hazır olan alanlardan ===
 if sc_trigger and use_signalconvert and str.length(syminfo.tickerid) > 1
-    sc_change_pct = gunluk
+    sc_ema21_pos = close > ema_21 ? "Üstünde" : "Altında"
     sc_json = '{' +
-         '"event":"DIP_AL"' +
+         '"event":"ALGO_TARAMA"' +
          ',"symbol":"' + syminfo.ticker(syminfo.tickerid) + '"' +
          ',"subtitle":"' + sc_subtitle + '"' +
          ',"signal_tag":"' + sc_tag + '"' +
+         ',"periyot":"' + str.tostring(timeframe.period) + ' DK"' +
          ',"price":' + str.tostring(close, "#.##") +
-         ',"change_pct":' + str.tostring(sc_change_pct, "#.##") +
-         ',"entry":' + str.tostring(sc_entry, "#.##") +
-         ',"target":' + str.tostring(sc_target, "#.##") +
-         ',"target2":' + str.tostring(sc_target2, "#.##") +
-         ',"stop":' + str.tostring(sc_stop, "#.##") +
-         ',"rr":' + str.tostring(sc_rr, "#.##") +
-         ',"gunluk_skor":' + str.tostring(gunluk_skor_v) +
-         ',"gunluk_etiket":"Bugün"' +
-         ',"gunluk_kriterler":"' + gunluk_krit + '"' +
-         ',"canli_skor":' + str.tostring(canli_skor_v) +
-         ',"canli_kriterler":"' + canli_krit + '"' +
-         ',"giris_skor":' + str.tostring(giris_skor_v) +
-         ',"giris_kriterler":"' + giris_krit + '"' +
-         ',"atr_daily":' + str.tostring(atr_14_daily, "#.##") +
-         ',"basari_oran":50.0' +
-         ',"kazanc":10' +
-         ',"kayip":10' +
+         ',"change_pct":' + str.tostring(gunluk, "#.##") +
+         ',"rsi":' + str.tostring(rsi_value, "#.##") +
+         ',"sma_500":' + str.tostring(sma_500, "#.##") +
+         ',"sma_200":' + str.tostring(sma_200, "#.##") +
+         ',"sma_50":' + str.tostring(sma_50, "#.##") +
+         ',"ema_21":' + str.tostring(ema_21, "#.##") +
+         ',"ema21_pos":"' + sc_ema21_pos + '"' +
+         ',"market_status":"' + market_status + '"' +
+         ',"fear_status":"' + fear_status + '"' +
+         ',"fear_index":' + str.tostring(fear_index, "#.##") +
+         ',"intraday_trend":"' + intraday_trend + '"' +
+         ',"intraday_momentum":' + str.tostring(intraday_momentum, "#.##") +
+         ',"gap_type":"' + gap_type + '"' +
+         ',"gap_fill_status":"' + gap_fill_status + '"' +
+         ',"breadth_status":"' + breadth_status + '"' +
+         ',"sectors_up":' + str.tostring(sectors_up) +
+         ',"signal_strength":"' + signal_strength + '"' +
+         ',"signal_reliability":' + str.tostring(signal_reliability) +
+         ',"low_3month":' + str.tostring(low_3month, "#.##") +
+         ',"distance_3month":' + str.tostring(distance_3month, "#.##") +
+         ',"price_diff_3month":' + str.tostring(price_diff_3month, "#.##") +
+         ',"eval_3month":"' + eval_3month + '"' +
+         ',"low_1year":' + str.tostring(low_1year, "#.##") +
+         ',"distance_1year":' + str.tostring(distance_1year, "#.##") +
+         ',"price_diff_1year":' + str.tostring(price_diff_1year, "#.##") +
+         ',"eval_1year":"' + eval_1year + '"' +
+         ',"signal_strength_deep":"' + signal_strength_deep + '"' +
          '}'
     alert(sc_json, freq = i_alert_mode)
 

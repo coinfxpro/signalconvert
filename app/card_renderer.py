@@ -206,6 +206,34 @@ class CardData:
     kazanc: Optional[int] = None
     kayip: Optional[int] = None
     signal_tag: Optional[str] = None  # "DIP" / "FISH" / "TRANSFORM" — sembol altı büyük rozet
+    # AlgoTarama kartı için ek alanlar (Pine'dan gelir)
+    periyot: Optional[str] = None
+    rsi: Optional[float] = None
+    sma_500: Optional[float] = None
+    sma_200: Optional[float] = None
+    sma_50: Optional[float] = None
+    ema_21: Optional[float] = None
+    ema21_pos: Optional[str] = None
+    market_status: Optional[str] = None
+    fear_status: Optional[str] = None
+    fear_index: Optional[float] = None
+    intraday_trend: Optional[str] = None
+    intraday_momentum: Optional[float] = None
+    gap_type: Optional[str] = None
+    gap_fill_status: Optional[str] = None
+    breadth_status: Optional[str] = None
+    sectors_up: Optional[int] = None
+    signal_strength: Optional[str] = None
+    signal_reliability: Optional[int] = None
+    low_3month: Optional[float] = None
+    distance_3month: Optional[float] = None
+    price_diff_3month: Optional[float] = None
+    eval_3month: Optional[str] = None
+    low_1year: Optional[float] = None
+    distance_1year: Optional[float] = None
+    price_diff_1year: Optional[float] = None
+    eval_1year: Optional[str] = None
+    signal_strength_deep: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +345,9 @@ def _draw_criteria_box(img: Image.Image, xy, title: str, score_text: str,
 # Ana render
 # ---------------------------------------------------------------------------
 def render_card(data: CardData) -> Image.Image:
+    # AlgoTarama event'i ise farklı bir kart şablonu kullan
+    if data.event_type.upper() == "ALGO_TARAMA":
+        return render_algo_tarama_card(data)
     theme_key = EVENT_TO_THEME.get(data.event_type.upper(), "signal")
     theme = THEMES[theme_key]
     brand = data.footer or BRAND_NAME
@@ -612,6 +643,274 @@ def _status_badge_text(data: CardData) -> str:
     return mapping.get(et, "")
 
 
+# ---------------------------------------------------------------------------
+# AlgoTarama kart şablonu (BIST Genel + Dip Analizi + Teknik Özet)
+# ---------------------------------------------------------------------------
+ALGO_CARD_W = 900
+ALGO_CARD_H = 1200
+
+ALGO_THEME = {
+    "bg_top": (20, 35, 75),
+    "bg_bottom": (12, 22, 50),
+    "accent": (255, 210, 60),
+    "header_bg": (34, 197, 94),
+    "header_text": (255, 255, 255),
+    "header_label": "ALGO TARAMA",
+    "box_bg": (16, 30, 65),
+    "section_bg": (18, 34, 72),
+}
+
+TAG_COLORS = {
+    "DIP":       ((34, 197, 94),  (255, 255, 255)),
+    "FISH":      ((59, 130, 246), (255, 255, 255)),
+    "TRANSFORM": ((168, 85, 247), (255, 255, 255)),
+}
+
+
+def _dot(draw: ImageDraw.ImageDraw, xy, color, r: int = 6) -> None:
+    x, y = xy
+    draw.ellipse((x - r, y - r, x + r, y + r), fill=color)
+
+
+def _trend_color(positive: bool) -> tuple:
+    return (120, 255, 180) if positive else (255, 140, 140)
+
+
+def _draw_section_box(img: Image.Image, xy, theme: dict, alpha: int = 200) -> None:
+    x0, y0, x1, y1 = xy
+    overlay = Image.new("RGBA", (x1 - x0, y1 - y0), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    r, g, b = theme["section_bg"]
+    od.rounded_rectangle((0, 0, x1 - x0, y1 - y0), radius=14, fill=(r, g, b, alpha))
+    img.paste(overlay, (x0, y0), overlay)
+
+
+def render_algo_tarama_card(data: CardData) -> Image.Image:
+    theme = ALGO_THEME
+    brand = data.footer or BRAND_NAME
+    W, H = ALGO_CARD_W, ALGO_CARD_H
+
+    bg = _gradient_bg(W, H, theme["bg_top"], theme["bg_bottom"]).convert("RGB")
+    canvas = Image.new("RGB", (W, H), (12, 18, 30))
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, W, H), radius=28, fill=255)
+    canvas.paste(bg, (0, 0), mask)
+    img = canvas.convert("RGBA")
+    draw = ImageDraw.Draw(img)
+
+    # Sol dikey aksan
+    draw.rectangle((0, 0, 12, H), fill=theme["header_bg"])
+    pad_x = 40
+
+    # ---- Header ----
+    header_y = 30
+    header_text = theme["header_label"]
+    hb_font = _font(38, bold=True)
+    tw = _text_w(draw, header_text, hb_font)
+    bbox = draw.textbbox((0, 0), header_text, font=hb_font)
+    th = bbox[3] - bbox[1]
+    px, py = 22, 14
+    rect = (pad_x, header_y, pad_x + tw + px * 2, header_y + th + py * 2)
+    _rounded_rect(draw, rect, radius=10, fill=theme["header_bg"])
+    draw.text((pad_x + px, header_y + py - 6), header_text,
+              font=hb_font, fill=theme["header_text"])
+    line_y = rect[3] + 12
+    draw.line((pad_x, line_y, W - pad_x, line_y), fill=(255, 255, 255), width=2)
+
+    # ---- Sağ üst: logo + marka + tarih ----
+    logo_size = 56
+    logo = _load_logo(logo_size)
+    brand_font = _font(15, bold=True)
+    brand_w = _text_w(draw, brand, brand_font)
+    right_edge = W - pad_x
+    if logo is not None:
+        logo_x = right_edge - logo_size
+        logo_y = 22
+        img.paste(logo, (logo_x, logo_y), logo)
+        draw.text((right_edge - brand_w, logo_y + logo_size + 2),
+                  brand, font=brand_font, fill=(255, 255, 255))
+
+    now_tr = datetime.now(TR_TZ)
+    date_str = now_tr.strftime("%d.%m %H:%M")
+    df = _font(15, bold=True)
+    dw = _text_w(draw, date_str, df)
+    draw.text((right_edge - dw, line_y + 10), date_str,
+              font=df, fill=(255, 255, 255, 210))
+
+    # ---- Sembol ----
+    sym_y = line_y + 38
+    draw.text((pad_x, sym_y), data.symbol.upper(),
+              font=_font(64, bold=True), fill=(255, 255, 255))
+
+    # Periyot + fiyat (sağda)
+    info_font = _font(20, bold=True)
+    info_lines = []
+    if data.periyot:
+        info_lines.append(f"PERİYOT: {data.periyot}")
+    if data.price is not None:
+        info_lines.append(f"FİYAT: {data.price:.2f}".replace(".", ","))
+    iy = sym_y + 10
+    for ln in info_lines:
+        lw = _text_w(draw, ln, info_font)
+        draw.text((right_edge - lw, iy), ln, font=info_font, fill=(255, 255, 255, 230))
+        iy += 28
+
+    # Subtitle
+    if data.subtitle:
+        draw.text((pad_x, sym_y + 78), data.subtitle,
+                  font=_font(20, bold=True), fill=(255, 230, 160))
+
+    # ---- Sinyal Tag Rozeti ----
+    cur_y = sym_y + 110
+    if data.signal_tag:
+        tag = data.signal_tag.strip().upper()
+        bg_col, fg_col = TAG_COLORS.get(tag, ((100, 116, 139), (255, 255, 255)))
+        tag_font = _font(28, bold=True)
+        tw_tag = _text_w(draw, tag, tag_font)
+        bbox_tag = draw.textbbox((0, 0), tag, font=tag_font)
+        th_tag = bbox_tag[3] - bbox_tag[1]
+        px_t, py_t = 16, 6
+        tag_rect = (pad_x, cur_y, pad_x + tw_tag + px_t * 2, cur_y + th_tag + py_t * 2)
+        _rounded_rect(draw, tag_rect, radius=10, fill=bg_col)
+        draw.text((pad_x + px_t, cur_y + py_t - 4), tag,
+                  font=tag_font, fill=fg_col)
+        cur_y += th_tag + py_t * 2 + 16
+    else:
+        cur_y += 8
+
+    # ---- Günlük Teknik Özet ----
+    sec_h = 220
+    _draw_section_box(img, (pad_x, cur_y, W - pad_x, cur_y + sec_h), theme)
+    draw = ImageDraw.Draw(img)
+    title_font = _font(18, bold=True)
+    draw.text((pad_x + 16, cur_y + 12), "📈 GÜNLÜK TEKNİK ÖZET",
+              font=title_font, fill=(255, 210, 60))
+
+    row_font = _font(16, bold=True)
+    rows = []
+    if data.change_pct is not None:
+        rows.append(("Günlük Değişim", _fmt_pct(data.change_pct), data.change_pct >= 0))
+    if data.sma_500 is not None and data.price is not None:
+        rows.append(("Günlük 500SMA", f"{data.sma_500:.2f}".replace(".", ","), data.price > data.sma_500))
+    if data.sma_200 is not None and data.price is not None:
+        rows.append(("Günlük 200SMA", f"{data.sma_200:.2f}".replace(".", ","), data.price > data.sma_200))
+    if data.sma_50 is not None and data.price is not None:
+        rows.append(("Günlük 50SMA", f"{data.sma_50:.2f}".replace(".", ","), data.price > data.sma_50))
+    if data.ema_21 is not None and data.price is not None:
+        rows.append(("Günlük EMA21", f"{data.ema_21:.2f}".replace(".", ","), data.price > data.ema_21))
+    if data.rsi is not None:
+        rsi_good = 30 <= data.rsi <= 70
+        rows.append(("RSI", f"{data.rsi:.2f}".replace(".", ","), rsi_good))
+
+    ry = cur_y + 44
+    for label, value, positive in rows[:6]:
+        draw.text((pad_x + 16, ry), label, font=row_font, fill=(220, 230, 240))
+        _dot(draw, (W - pad_x - 28, ry + 10), _trend_color(positive), 5)
+        vw = _text_w(draw, value, row_font)
+        draw.text((W - pad_x - 48 - vw, ry), value, font=row_font, fill=_trend_color(positive))
+        ry += 26
+    cur_y += sec_h + 14
+
+    # ---- BIST Genel Görünüm ----
+    sec_h = 220
+    _draw_section_box(img, (pad_x, cur_y, W - pad_x, cur_y + sec_h), theme)
+    draw = ImageDraw.Draw(img)
+    draw.text((pad_x + 16, cur_y + 12), "📊 BIST GENEL GÖRÜNÜM",
+              font=title_font, fill=(255, 210, 60))
+
+    bist_rows = []
+    if data.market_status:
+        bist_rows.append(("Durum", data.market_status))
+    if data.fear_status is not None:
+        fi = f" ({data.fear_index:.2f})".replace(".", ",") if data.fear_index is not None else ""
+        bist_rows.append(("Fear Index", f"{data.fear_status}{fi}"))
+    if data.intraday_trend:
+        im = f" (%{data.intraday_momentum:.2f})".replace(".", ",") if data.intraday_momentum is not None else ""
+        bist_rows.append(("Gün İçi Trend", f"{data.intraday_trend}{im}"))
+    if data.gap_type:
+        gf = f" - {data.gap_fill_status}" if data.gap_fill_status else ""
+        bist_rows.append(("Gap", f"{data.gap_type}{gf}"))
+    if data.breadth_status:
+        su = f" ({data.sectors_up}/4)" if data.sectors_up is not None else ""
+        bist_rows.append(("Sektör Durumu", f"{data.breadth_status}{su}"))
+    if data.signal_strength:
+        sr = f" ⭐{data.signal_reliability}" if data.signal_reliability is not None else ""
+        bist_rows.append(("Sinyal Kalitesi", f"{data.signal_strength}{sr}"))
+
+    ry = cur_y + 44
+    for label, value in bist_rows[:6]:
+        draw.text((pad_x + 16, ry), f"├ {label}:", font=row_font, fill=(220, 230, 240))
+        draw.text((pad_x + 200, ry), value, font=row_font, fill=(255, 255, 255))
+        ry += 26
+    cur_y += sec_h + 14
+
+    # ---- Dip Analizi ----
+    sec_h = 240
+    _draw_section_box(img, (pad_x, cur_y, W - pad_x, cur_y + sec_h), theme)
+    draw = ImageDraw.Draw(img)
+    draw.text((pad_x + 16, cur_y + 12), "🎯 DİP ANALİZİ",
+              font=title_font, fill=(255, 210, 60))
+
+    col_w = (W - pad_x * 2 - 30) // 2
+
+    # 3 Aylık
+    bx0 = pad_x + 16
+    by = cur_y + 44
+    draw.text((bx0, by), "3 AYLIK", font=_font(16, bold=True), fill=(255, 210, 60))
+    by += 22
+    if data.low_3month is not None:
+        draw.text((bx0, by), f"Dip: {data.low_3month:.2f} TL".replace(".", ","),
+                  font=row_font, fill=(255, 255, 255)); by += 22
+    if data.price_diff_3month is not None:
+        draw.text((bx0, by), f"Fark: {data.price_diff_3month:.2f} TL".replace(".", ","),
+                  font=row_font, fill=(220, 230, 240)); by += 22
+    if data.distance_3month is not None:
+        ev = f" {data.eval_3month}" if data.eval_3month else ""
+        draw.text((bx0, by), f"Uzaklık: %{data.distance_3month:.2f}{ev}".replace(".", ","),
+                  font=row_font, fill=(255, 255, 255)); by += 22
+
+    # Yıllık
+    bx1 = pad_x + 16 + col_w + 30
+    by = cur_y + 44
+    draw.text((bx1, by), "YILLIK", font=_font(16, bold=True), fill=(255, 210, 60))
+    by += 22
+    if data.low_1year is not None:
+        draw.text((bx1, by), f"Dip: {data.low_1year:.2f} TL".replace(".", ","),
+                  font=row_font, fill=(255, 255, 255)); by += 22
+    if data.price_diff_1year is not None:
+        draw.text((bx1, by), f"Fark: {data.price_diff_1year:.2f} TL".replace(".", ","),
+                  font=row_font, fill=(220, 230, 240)); by += 22
+    if data.distance_1year is not None:
+        ev = f" {data.eval_1year}" if data.eval_1year else ""
+        draw.text((bx1, by), f"Uzaklık: %{data.distance_1year:.2f}{ev}".replace(".", ","),
+                  font=row_font, fill=(255, 255, 255)); by += 22
+
+    # Genel değerlendirme
+    if data.signal_strength_deep:
+        deep_y = cur_y + sec_h - 50
+        draw.line((pad_x + 16, deep_y - 8, W - pad_x - 16, deep_y - 8),
+                  fill=(255, 255, 255, 40), width=1)
+        draw.text((pad_x + 16, deep_y),
+                  f"Değerlendirme: {data.signal_strength_deep}",
+                  font=_font(18, bold=True), fill=(255, 210, 60))
+
+    cur_y += sec_h + 14
+
+    # ---- Uyarı + Marka ----
+    warn_y = H - 70
+    draw.line((pad_x, warn_y, W - pad_x, warn_y), fill=(255, 255, 255, 40), width=1)
+    warn_font = _font(13, bold=True)
+    draw.text((pad_x, warn_y + 10),
+              "!  Bu sinyal yatırım tavsiyesi değildir. Potansiyel hesaplamalara dayanmaktadır.",
+              font=warn_font, fill=(255, 230, 160, 220))
+    br_font = _font(13, bold=True)
+    brw = _text_w(draw, brand, br_font)
+    draw.text((W - pad_x - brw, warn_y + 32), brand,
+              font=br_font, fill=(255, 255, 255, 220))
+
+    return img.convert("RGB")
+
+
 def render_to_file(data: CardData, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     img = render_card(data)
@@ -622,6 +921,10 @@ def render_to_file(data: CardData, path: Path) -> Path:
 def build_caption(data: CardData) -> str:
     et = data.event_type.upper()
     sym = data.symbol.upper()
+    if et == "ALGO_TARAMA":
+        tag = (data.signal_tag or "").upper()
+        emoji = {"DIP": "🟢", "FISH": "🔵", "TRANSFORM": "🟣"}.get(tag, "🟢")
+        return f"{emoji} <b>{sym}</b> | {data.subtitle or 'Algo Tarama'}"
     if et in ("DIP_AL", "SIGNAL"):
         return f"🟢 <b>{sym}</b> | {data.subtitle or 'Yeni Sinyal'}"
     if et == "TP1":
