@@ -1058,10 +1058,12 @@ if durum != 0 and str.length(syminfo.tickerid) > 1// herhangi bir sinyal var ise
          + "\\n" +dip_analysis_text + "\\n\\n" +  // YENİ EKLENEN DİP ANALİZİ
          "🎯 *Dip Analizi Değerlendirmesi*: " + signal_strength_deep  // YENİ EKLENEN GENEL DEĞERLENDİRME
     reply = ',"reply_markup":{"inline_keyboard":[[{"text":"📉 Tradingview","url":"https://www.tradingview.com/chart/?symbol='+syminfo.tickerid+'"}]]}'
-    if telegramSend
-        alert(message='{"chat_id":"'+grupid+'","text":"'+alarmMesajiJSON+'","parse_mode":"html"'+reply+'}',freq =  i_alert_mode)
-    else
-        alert(message = syminfo.ticker(syminfo.tickerid) + " hissesinde sinyal : " + mesaj)
+    // SignalConvert webhook aktifken eski alert bloğu hiç çalışmaz (çift mesaj/boş kart önleme)
+    if not use_signalconvert
+        if telegramSend
+            alert(message='{"chat_id":"'+grupid+'","text":"'+alarmMesajiJSON+'","parse_mode":"html"'+reply+'}',freq =  i_alert_mode)
+        else
+            alert(message = syminfo.ticker(syminfo.tickerid) + " hissesinde sinyal : " + mesaj)
 
 
 
