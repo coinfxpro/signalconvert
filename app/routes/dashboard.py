@@ -27,6 +27,17 @@ router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 
 
+# Türkiye saatine çevir (UTC+3) — DB'de utcnow ile yazılan değerleri gösterirken kullan
+from datetime import timedelta as _td
+
+def _tr_time(dt):
+    if dt is None:
+        return ""
+    return dt + _td(hours=3)
+
+templates.env.filters["tr"] = _tr_time
+
+
 def _guard(request: Request) -> None:
     if not is_authenticated(request):
         raise HTTPException(status_code=401, detail="login required")

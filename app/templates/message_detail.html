@@ -3,7 +3,7 @@
 {% block content %}
 <a href="/messages" class="text-sm text-brand-500 hover:underline">← Tüm mesajlar</a>
 <h1 class="text-2xl font-bold mt-2 mb-1">Mesaj #{{ m.id }}</h1>
-<div class="text-slate-400 text-sm mb-6">{{ m.created_at.strftime('%d.%m.%Y %H:%M:%S') }} · {{ bot.name if bot else '—' }}</div>
+<div class="text-slate-400 text-sm mb-6">{{ (m.created_at | tr).strftime('%d.%m.%Y %H:%M:%S') }} · {{ bot.name if bot else '—' }}</div>
 
 <div class="grid md:grid-cols-2 gap-6">
   <div>
