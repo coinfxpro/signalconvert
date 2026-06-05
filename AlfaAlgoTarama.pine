@@ -39,6 +39,9 @@ Bear_to_Bull_al= input(true, title = 'Bear-Bull TakeOver',group = "////--Sinyall
 telegramSend = input.bool(defval = false, title = "", group = "TELEGRAM", inline = "TG")
 grupid = input.string(defval = "Telegram CHAT ID", title = "", tooltip = "Telegram Channel, Group veya Profile ID", group = "TELEGRAM", inline = "TG")
 
+// SignalConvert toggle (eski Telegram bloğunu devre dışı bırakmak için yukarıda tanımlı olmalı)
+use_signalconvert = input.bool(true, "SignalConvert Webhook Aktif", group="SIGNALCONVERT")
+
 i_alert_mode = input.string(defval=alert.freq_once_per_bar, title='Alerts Mode', options=[alert.freq_all, alert.freq_once_per_bar, alert.freq_once_per_bar_close])
 
 
@@ -1077,7 +1080,7 @@ if durum != 0 and str.length(syminfo.tickerid) > 1// herhangi bir sinyal var ise
 ///   Dip + Transform + Fish sinyallerini SignalConvert'e JSON gönderir; orada görsel karta dönüşür.                    ///
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-use_signalconvert = input.bool(true, "SignalConvert Webhook Aktif", group="SIGNALCONVERT")
+// use_signalconvert input dosyanın başında tanımlı
 
 // === Sinyal tetikleyici ===
 sc_trigger = (dip_buy_signal and dip_al) or (fish_buy_signal and fish_al) or (TRSlongCondition and TRS_al)
